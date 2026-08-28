@@ -7,11 +7,28 @@ Finance Automation processes SMS transaction notes and generates finance reports
 - Processes pending transaction notes when Obsidian starts.
 - Processes and refreshes reports after a transaction note is created or changed.
 - Parses configurable English and Arabic SMS patterns.
+- Captures raw SMS text or structured transaction fields from iPhone Shortcuts through `obsidian://` links.
 - Generates `Stats/Summary.md`, `Stats/Needs Review.md`, and `Stats/transactions.csv`.
 - Shows a spinning ribbon icon while processing.
 - Uses only Obsidian APIs: no Python, desktop-only APIs, network requests, or telemetry.
 
 The plugin expects its vault data under `Transactions/`, `Accounts/`, and `Settings/`. Parser patterns and account/category rules remain normal JSON and Markdown files in the vault.
+
+## iPhone Shortcuts
+
+Version 2.1.0 adds two capture actions:
+
+```text
+obsidian://finance-sms?message=[Encoded SMS]&timestamp=[Encoded ISO date]
+```
+
+This sends the original SMS and lets the plugin parse its transaction fields locally.
+
+```text
+obsidian://finance-transaction?amount=120.50&currency=EGP&account=Visa%201234&type=debit
+```
+
+This creates a transaction from fields that have already been collected or parsed. See [iPhone Shortcuts](docs/iphone-shortcuts.md) for parameters, examples, and setup instructions.
 
 ## Install with BRAT
 

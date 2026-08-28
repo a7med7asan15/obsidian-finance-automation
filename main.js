@@ -46,6 +46,10 @@ function stableId(text) {
   return first.toString(16).padStart(8, "0") + second.toString(16).padStart(8, "0");
 }
 
+function yamlString(value) {
+  return JSON.stringify(String(value ?? ""));
+}
+
 function originalSms(properties, content) {
   if (properties.sms_message) return String(properties.sms_message).trim();
   const match = content.match(/## Original SMS\s*\n+```(?:text)?\s*\n([\s\S]*?)\n```/i);
@@ -64,6 +68,13 @@ module.exports = class FinanceAutomationPlugin extends Plugin {
     this.ignoreWatchUntil = new Map();
     this.status = this.addStatusBarItem();
     this.setStatus("ready");
+
+    this.registerObsidianProtocolHandler("finance-sms", async (params) => {
+      await this.handleCaptureLink("sms", params);
+    });
+    this.registerObsidianProtocolHandler("finance-transaction", async (params) => {
+      await this.handleCaptureLink("transaction", params);
+    });
 
     this.processIcon = this.addRibbonIcon("refresh-cw", "Process transactions and refresh statistics", () => {
       this.runFinance("all", true);
@@ -117,6 +128,152 @@ module.exports = class FinanceAutomationPlugin extends Plugin {
   onunload() {
     if (this.watchTimer) clearTimeout(this.watchTimer);
     if (this.startupTimer) clearTimeout(this.startupTimer);
+  }
+
+  async handleCaptureLink(kind, params) {
+    try {
+      const file = kind === "sms"
+        ? await this.createRawSmsTransaction(params)
+        : await this.createStructuredTransaction(params);
+      new Notice(`Finance: captured ${file.path}.`, 5000);
+    } catch (error) {
+      console.error("Finance capture link failed", error);
+      new Notice(`Finance capture failed: ${error.message}`, 10000);
+    }
+  }
+
+  protocolValue(params, ...names) {
+    for (const name of names) {
+      const value = params?.[name];
+      if (value !== null && value !== undefined && String(value).trim() !== "") return String(value).trim();
+    }
+    return "";
+  }
+
+  protocolTimestamp(params) {
+    return this.protocolValue(params, "timestamp", "date") || new Date().toISOString();
+  }
+
+  transactionPathParts(timestamp) {
+    const direct = String(timestamp).match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})/);
+    if (direct) {
+      const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+      return `${direct[1]}/${months[Number(direct[2]) - 1]}/${direct[3]}T${direct[4]}-${direct[5]}-${direct[6]}`;
+    }
+    const date = new Date(timestamp);
+    const usable = Number.isNaN(date.getTime()) ? new Date() : date;
+    const year = usable.getFullYear();
+    const month = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][usable.getMonth()];
+    const two = (value) => String(value).padStart(2, "0");
+    return `${year}/${month}/${two(usable.getDate())}T${two(usable.getHours())}-${two(usable.getMinutes())}-${two(usable.getSeconds())}`;
+  }
+
+  uniqueTransactionPath(timestamp) {
+    const base = `Transactions/${this.transactionPathParts(timestamp)}`;
+    let candidate = `${base}.md`;
+    let suffix = 2;
+    while (this.app.vault.getAbstractFileByPath(candidate)) {
+      candidate = `${base}-${suffix}.md`;
+      suffix += 1;
+    }
+    return candidate;
+  }
+
+  transactionMarkdown(fields, sms) {
+    const lines = [
+      "---",
+      "type: transaction",
+      `timestamp: ${yamlString(fields.timestamp)}`,
+      `sms_message: ${yamlString(sms)}`,
+      fields.amount === null || fields.amount === undefined || fields.amount === "" ? "amount:" : `amount: ${fields.amount}`,
+      fields.currency ? `currency: ${yamlString(fields.currency)}` : "currency:",
+      fields.from_account ? `from_account: ${yamlString(fields.from_account)}` : "from_account:",
+      fields.to_account ? `to_account: ${yamlString(fields.to_account)}` : "to_account:",
+      `category: ${yamlString(fields.category || "Uncategorized")}`,
+      fields.merchant ? `merchant: ${yamlString(fields.merchant)}` : "merchant:",
+      fields.transaction_type ? `transaction_type: ${yamlString(fields.transaction_type)}` : "transaction_type:",
+      `status: ${fields.status || "pending"}`,
+      `source: ${fields.source}`,
+      fields.parser_confidence === null || fields.parser_confidence === undefined
+        ? "parser_confidence:"
+        : `parser_confidence: ${fields.parser_confidence}`,
+      fields.transaction_id ? `transaction_id: ${yamlString(fields.transaction_id)}` : "transaction_id:",
+      "tags:",
+      "  - finance/transaction",
+      "---",
+      "",
+      "# Transaction",
+      "",
+      "## Original SMS",
+      "",
+      "```text",
+      sms,
+      "```",
+      "",
+    ];
+    return lines.join("\n");
+  }
+
+  async createRawSmsTransaction(params) {
+    const sms = this.protocolValue(params, "message", "sms", "text");
+    if (!sms) throw new Error("the message parameter is empty");
+    const timestamp = this.protocolTimestamp(params);
+    const path = this.uniqueTransactionPath(timestamp);
+    const content = this.transactionMarkdown({
+      timestamp,
+      amount: null,
+      currency: "",
+      from_account: "",
+      to_account: "",
+      category: "Uncategorized",
+      merchant: "",
+      transaction_type: "",
+      status: "pending",
+      source: "iphone-shortcut-sms",
+      parser_confidence: null,
+      transaction_id: "",
+    }, sms);
+    await this.writeVaultFile(path, content);
+    return this.app.vault.getAbstractFileByPath(path);
+  }
+
+  async createStructuredTransaction(params) {
+    const amountText = this.protocolValue(params, "amount").replaceAll(",", "");
+    const amount = amountText && Number.isFinite(Number(amountText)) ? Number(amountText) : null;
+    const currency = normalizeCurrency(this.protocolValue(params, "currency"), "");
+    const transactionType = this.protocolValue(params, "type", "transaction_type").toLocaleLowerCase();
+    const validType = ["debit", "credit", "transfer", "fee"].includes(transactionType);
+    const account = this.protocolValue(params, "account", "account_name");
+    let fromAccount = this.protocolValue(params, "from", "from_account");
+    let toAccount = this.protocolValue(params, "to", "to_account");
+    if (account && !fromAccount && !toAccount) {
+      if (transactionType === "credit") toAccount = account;
+      else fromAccount = account;
+    }
+    const timestamp = this.protocolTimestamp(params);
+    const sms = this.protocolValue(params, "message", "sms", "text");
+    const category = this.protocolValue(params, "category") || "Uncategorized";
+    const merchant = this.protocolValue(params, "merchant");
+    const checks = [amount !== null, Boolean(currency), validType, Boolean(fromAccount || toAccount)];
+    const complete = checks.every(Boolean);
+    const fingerprint = [timestamp, amount, currency, transactionType, fromAccount, toAccount, merchant].join("|");
+    const path = this.uniqueTransactionPath(timestamp);
+    const content = this.transactionMarkdown({
+      timestamp,
+      amount,
+      currency,
+      from_account: fromAccount,
+      to_account: toAccount,
+      category,
+      merchant,
+      transaction_type: transactionType,
+      status: complete ? "parsed" : "needs_review",
+      source: "iphone-shortcut-fields",
+      parser_confidence: checks.filter(Boolean).length / checks.length,
+      transaction_id: stableId(fingerprint),
+    }, sms);
+    await this.writeVaultFile(path, content);
+    return this.app.vault.getAbstractFileByPath(path);
   }
 
   isTransactionNote(vaultPath) {
