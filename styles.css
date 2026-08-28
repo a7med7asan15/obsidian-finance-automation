@@ -1,0 +1,19 @@
+.finance-automation-process-icon.is-processing svg {
+  animation: finance-automation-spin 0.9s linear infinite;
+}
+
+.finance-automation-process-icon.is-processing {
+  color: var(--interactive-accent);
+}
+
+@keyframes finance-automation-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .finance-automation-process-icon.is-processing svg {
+    animation: none;
+  }
+}
