@@ -1330,7 +1330,7 @@ export function distinctAccounts(records: TransactionRecord[]): string[] {
 Run: `node --test tests/filter.test.ts`
 Expected: PASS, 17 tests.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/domain/filter.ts tests/filter.test.ts tests/helpers/factory.ts
