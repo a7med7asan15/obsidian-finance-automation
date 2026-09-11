@@ -758,7 +758,7 @@ Turns raw frontmatter objects into the typed records the rest of the system uses
   - `buildCategory(frontmatter: Record<string, unknown>, path: string): CategoryRecord`
   - `isTransactionPath(path: string): boolean`
 
-- [ ] **Step 1: Write the failing test `tests/records.test.ts`**
+- [x] **Step 1: Write the failing test `tests/records.test.ts`**
 
 ```ts
 import test from "node:test";
@@ -895,12 +895,12 @@ test("isTransactionPath accepts transaction notes and rejects the README", () =>
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `node --test tests/records.test.ts`
 Expected: FAIL — cannot find module `../src/data/records.ts`.
 
-- [ ] **Step 3: Write `src/data/records.ts`**
+- [x] **Step 3: Write `src/data/records.ts`**
 
 ```ts
 import { readBoolean, readNumber, readString, readStringList } from "./frontmatter.ts";
@@ -1021,12 +1021,12 @@ export function buildCategory(
 }
 ```
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 Run: `node --test tests/records.test.ts`
 Expected: PASS, 14 tests.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/data/records.ts tests/records.test.ts
