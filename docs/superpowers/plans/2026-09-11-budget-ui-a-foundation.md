@@ -2554,13 +2554,13 @@ Moves the existing parsing logic out of `main.js` into pure, typed, tested modul
   - `stableId(text: string): string`
   - `normalizeCurrency(value: string, fallback: string): string`
 
-- [ ] **Step 1: Read the original implementation**
+- [x] **Step 1: Read the original implementation**
 
 Run: `git show HEAD:main.js | sed -n '1,60p;356,440p'`
 
 Copy the logic verbatim. The regex translation in `makeRegex` (Python `(?P<name>)` → JavaScript `(?<name>)`, stripping a leading `(?i)`) exists because `Settings/sms_patterns.json` still uses Python-flavoured patterns. That file is user-editable and must keep working unchanged.
 
-- [ ] **Step 2: Write the failing test `tests/parser.test.ts`**
+- [x] **Step 2: Write the failing test `tests/parser.test.ts`**
 
 ```ts
 import test from "node:test";
@@ -2681,12 +2681,12 @@ test("a broken pattern in sms_patterns.json throws a named error", () => {
 });
 ```
 
-- [ ] **Step 3: Run the test to verify it fails**
+- [x] **Step 3: Run the test to verify it fails**
 
 Run: `node --test tests/parser.test.ts`
 Expected: FAIL — cannot find module `../src/domain/parser/sms.ts`.
 
-- [ ] **Step 4: Write `src/domain/categorize.ts`**
+- [x] **Step 4: Write `src/domain/categorize.ts`**
 
 ```ts
 export interface CategoryRules {
@@ -2705,7 +2705,7 @@ export function categorize(text: string, rules: CategoryRules): string {
 }
 ```
 
-- [ ] **Step 5: Write `src/domain/parser/patterns.ts`**
+- [x] **Step 5: Write `src/domain/parser/patterns.ts`**
 
 ```ts
 /**
@@ -2740,7 +2740,7 @@ export function hasKeyword(text: string, keywords: string[] | undefined): boolea
 }
 ```
 
-- [ ] **Step 6: Write `src/domain/parser/sms.ts`**
+- [x] **Step 6: Write `src/domain/parser/sms.ts`**
 
 ```ts
 import { extractByPatterns, hasKeyword } from "./patterns.ts";
@@ -2881,7 +2881,7 @@ export function parseSms(
 }
 ```
 
-- [ ] **Step 7: Run the tests to verify they pass**
+- [x] **Step 7: Run the tests to verify they pass**
 
 Run: `node --test tests/parser.test.ts`
 Expected: PASS, 11 tests.
