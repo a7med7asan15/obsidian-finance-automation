@@ -1709,7 +1709,7 @@ Per the spec, balance is derived from an opening balance plus every non-excluded
   - `netWorthByCurrency(balances: AccountBalance[]): Map<string, number>`
   - `unknownAccountNames(accounts: AccountRecord[], records: TransactionRecord[]): string[]`
 
-- [ ] **Step 1: Write the failing test `tests/balances.test.ts`**
+- [x] **Step 1: Write the failing test `tests/balances.test.ts`**
 
 ```ts
 import test from "node:test";
@@ -1826,12 +1826,12 @@ test("unknownAccountNames lists names used by transactions but not configured", 
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `node --test tests/balances.test.ts`
 Expected: FAIL — cannot find module `../src/domain/balances.ts`.
 
-- [ ] **Step 3: Write `src/domain/balances.ts`**
+- [x] **Step 3: Write `src/domain/balances.ts`**
 
 ```ts
 import type { AccountRecord, TransactionRecord } from "../data/types.ts";
@@ -1928,12 +1928,12 @@ export function unknownAccountNames(
 
 Note the `credit` branch falls back to `fromAccount` when `toAccount` is empty: the structured capture link writes a credit's account into `to_account`, but a hand-written note sometimes puts it in `from_account`. Without the fallback, incoming salary would silently not raise the balance.
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 Run: `node --test tests/balances.test.ts`
 Expected: PASS, 12 tests.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/domain/balances.ts tests/balances.test.ts
