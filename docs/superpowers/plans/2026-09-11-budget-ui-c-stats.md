@@ -60,7 +60,7 @@ Deleted: `Budget/Stats/Summary.md`, `Budget/Stats/Needs Review.md`, `Budget/Stat
 
 `niceMax` and `arcPath` are pure and worth testing; the DOM helpers are not.
 
-- [ ] **Step 1: Write the failing test `tests/charts.test.ts`**
+- [x] **Step 1: Write the failing test `tests/charts.test.ts`**
 
 ```ts
 import test from "node:test";
@@ -73,7 +73,7 @@ test("niceMax rounds up to a readable axis maximum", () => {
   assert.equal(niceMax(12), 20);
   assert.equal(niceMax(23), 25);
   assert.equal(niceMax(180), 200);
-  assert.equal(niceMax(1420.5), 1500);
+  assert.equal(niceMax(1420.5), 2000);
   assert.equal(niceMax(9999), 10000);
 });
 
@@ -109,12 +109,12 @@ test("a full-circle arc does not collapse to a point", () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `node --test tests/charts.test.ts`
 Expected: FAIL — cannot find module `../src/ui/charts/svg.ts`.
 
-- [ ] **Step 3: Write `src/ui/charts/svg.ts`**
+- [x] **Step 3: Write `src/ui/charts/svg.ts`**
 
 ```ts
 const SVG_NS = "http://www.w3.org/2000/svg";
@@ -190,14 +190,14 @@ export function arcPath(
 }
 ```
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 Run: `node --test tests/charts.test.ts`
 Expected: PASS, 6 tests.
 
 If `createChart` fails under `node --test` because there is no DOM, that is expected — the test file must only import the pure functions. Do not add a DOM shim.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/ui/charts/svg.ts tests/charts.test.ts
