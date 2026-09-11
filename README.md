@@ -56,6 +56,21 @@ Download `main.js`, `manifest.json`, and `styles.css` from the latest GitHub rel
 
 Restart Obsidian, then enable **Finance Automation** under Community plugins.
 
+## The Budget view
+
+Open it from the wallet icon in the ribbon, or with **Open Budget** from the command
+palette. It has three tabs sharing one set of filters.
+
+- **Transactions** — grouped by day, defaulting to the current month. Step months with
+  the arrows, or tap the month name to switch to a year, all time, or a custom range.
+  Tap a transaction to edit it; long-press (iPhone) or right-click (desktop) for quick
+  category and exclude actions. The + button adds one by hand.
+- **Excluding a transaction** keeps it in the list but removes it from every total.
+  Use it for a reversal, a duplicate SMS, or anything that did not really happen.
+- **Exclusion rules** (command palette: **Edit exclusion rules**) exclude matching
+  transactions automatically. A transaction you excluded by hand is never overridden
+  by a rule.
+
 ## Developing the plugin
 
 The plugin is written in TypeScript under `Budget/obsidian-finance-automation/src/`

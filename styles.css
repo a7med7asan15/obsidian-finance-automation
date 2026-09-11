@@ -323,3 +323,17 @@
 .fin-rule-preview-list { margin: 4px 0 0; padding-left: 18px; color: var(--text-muted); }
 .fin-rule-error { padding: 12px; border-radius: var(--fin-radius); background: color-mix(in srgb, var(--fin-money-out) 12%, transparent); }
 .fin-rule-error-text { color: var(--fin-money-out); }
+
+/* ---------- mobile ---------- */
+/* Stop iOS zooming the page when a text field is focused. */
+.finance-budget input, .fin-sheet input, .fin-sheet select, .fin-sheet textarea {
+  font-size: 16px;
+}
+
+/* Keep the floating button clear of the iPhone home indicator. */
+.fin-fab { bottom: calc(20px + env(safe-area-inset-bottom)); }
+
+/* Keep the sheet clear of it too. */
+@media (max-width: 640px) {
+  .fin-sheet { padding-bottom: env(safe-area-inset-bottom); }
+}

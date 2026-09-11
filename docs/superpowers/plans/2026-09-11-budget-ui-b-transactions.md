@@ -2560,7 +2560,7 @@ Build, let `github-gitless-sync` carry the plugin across (or install through BRA
 7. Rotate to landscape — nothing overflows horizontally.
 8. Switch to a light theme and back — every surface and every amount stays legible.
 
-- [ ] **Step 2: Fix what the pass found**
+- [x] **Step 2: Fix what the pass found**
 
 Common ones to expect, with the fixes:
 
@@ -2579,7 +2579,7 @@ Common ones to expect, with the fixes:
 }
 ```
 
-- [ ] **Step 3: Document the view in `README.md`**
+- [x] **Step 3: Document the view in `README.md`**
 
 Add under "Obsidian automation":
 
@@ -2600,12 +2600,12 @@ palette. It has three tabs sharing one set of filters.
   by a rule.
 ```
 
-- [ ] **Step 4: Run the full suite and build**
+- [x] **Step 4: Run the full suite and build**
 
 Run: `npm test && npm run build`
 Expected: both exit 0.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add styles.css README.md
