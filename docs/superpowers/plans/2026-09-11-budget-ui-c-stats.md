@@ -1476,7 +1476,7 @@ limit: 5
 
 Every key is optional. `period` accepts `YYYY-MM`, `YYYY`, or `all`, and defaults to the month the note is read in.
 
-- [ ] **Step 1: Write `src/codeblock.ts`**
+- [x] **Step 1: Write `src/codeblock.ts`**
 
 ```ts
 import { MarkdownPostProcessorContext, parseYaml } from "obsidian";
@@ -1578,11 +1578,11 @@ export function registerFinanceCodeBlock(plugin: FinanceAutomationPlugin): void 
 
 The embed is deliberately read-only and does not subscribe to the index: a note can hold several of these, and keeping them all live would multiply re-renders for no real gain. It refreshes when the note is re-rendered.
 
-- [ ] **Step 2: Register it**
+- [x] **Step 2: Register it**
 
 In `main.ts` `onload`: `registerFinanceCodeBlock(this);`
 
-- [ ] **Step 3: Style it in `styles.css`**
+- [x] **Step 3: Style it in `styles.css`**
 
 ```css
 .fin-embed {
@@ -1607,7 +1607,7 @@ limit: 5
 
 Check: it renders the income/expenses/net strip and the top five categories in both Reading view and Live Preview; a bad `period` falls back to the current month; malformed YAML shows the error message rather than an empty block; "Open Budget" opens the view.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/codeblock.ts src/main.ts styles.css

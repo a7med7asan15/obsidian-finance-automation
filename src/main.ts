@@ -5,6 +5,7 @@ import {
   CONFIG_PATH,
   SETTINGS_DIR,
 } from "./constants.ts";
+import { registerFinanceCodeBlock } from "./codeblock.ts";
 import { TransactionIndex } from "./data/index-store.ts";
 import { createRawSmsTransaction, createStructuredTransaction } from "./data/create.ts";
 import type { ProtocolParams } from "./data/create.ts";
@@ -59,6 +60,7 @@ export default class FinanceAutomationPlugin extends Plugin {
     this.setStatus("ready");
 
     this.registerView(BUDGET_VIEW_TYPE, (leaf) => new BudgetView(leaf, this));
+    registerFinanceCodeBlock(this);
 
     this.addRibbonIcon("wallet", "Open Budget", () => void this.activateBudgetView());
 

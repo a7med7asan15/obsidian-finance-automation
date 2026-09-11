@@ -454,3 +454,12 @@
 
 /* ---------- stats actions ---------- */
 .fin-stats-actions { padding: 0 var(--fin-gap) 96px; }
+
+/* ---------- markdown embed ---------- */
+.fin-embed {
+  height: auto; padding: 12px;
+  border: 1px solid var(--fin-border); border-radius: var(--fin-radius);
+  container-type: inline-size;
+}
+.fin-embed .fin-summary-row { margin-bottom: 12px; }
+.fin-embed-error { color: var(--fin-money-out); font-size: 0.85em; margin: 0; }
