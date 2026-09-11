@@ -1,6 +1,7 @@
 import { ItemView } from "obsidian";
 import type { WorkspaceLeaf } from "obsidian";
 import { PeriodPicker } from "./components/period-picker.ts";
+import { FilterBar } from "./components/filter-bar.ts";
 import type FinanceAutomationPlugin from "../main.ts";
 
 export const BUDGET_VIEW_TYPE = "finance-budget-view";
@@ -19,6 +20,7 @@ export class BudgetView extends ItemView {
   private headerEl!: HTMLElement;
   private bodyEl!: HTMLElement;
   private tabBarEl!: HTMLElement;
+  private filterBar: FilterBar | null = null;
   private unsubscribe: Array<() => void> = [];
 
   constructor(leaf: WorkspaceLeaf, plugin: FinanceAutomationPlugin) {
@@ -63,6 +65,7 @@ export class BudgetView extends ItemView {
   override async onClose(): Promise<void> {
     for (const stop of this.unsubscribe) stop();
     this.unsubscribe = [];
+    this.filterBar = null;
   }
 
   private renderTabBar(): void {
@@ -83,6 +86,12 @@ export class BudgetView extends ItemView {
   renderActiveTab(): void {
     this.headerEl.empty();
     new PeriodPicker(this.plugin.store).render(this.headerEl);
+
+    // The unfiltered set, so the menus always offer every value in the vault.
+    const all = this.plugin.index.transactions();
+    if (!this.filterBar) this.filterBar = new FilterBar(this.plugin.store, all);
+    else this.filterBar.setRecords(all);
+    this.filterBar.render(this.headerEl);
 
     this.bodyEl.empty();
     if (this.activeTab === "transactions") this.renderTransactions();

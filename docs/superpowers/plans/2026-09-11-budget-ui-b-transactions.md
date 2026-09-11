@@ -940,7 +940,7 @@ git commit -m "feat: add period picker with stepper and quick chips"
 
 `allRecords` is the **unfiltered** set, so the category and account menus always offer every option rather than only what survives the current filter.
 
-- [ ] **Step 1: Write `src/ui/components/filter-bar.ts`**
+- [x] **Step 1: Write `src/ui/components/filter-bar.ts`**
 
 ```ts
 import { Menu, setIcon } from "obsidian";
@@ -1138,7 +1138,7 @@ export class FilterBar {
 }
 ```
 
-- [ ] **Step 2: Style it in `styles.css`**
+- [x] **Step 2: Style it in `styles.css`**
 
 ```css
 .fin-filter-bar { padding: 0 var(--fin-gap) var(--fin-gap); display: flex; flex-direction: column; gap: 8px; }
@@ -1169,7 +1169,7 @@ export class FilterBar {
 }
 ```
 
-- [ ] **Step 3: Wire it into the view header**
+- [x] **Step 3: Wire it into the view header**
 
 In `renderActiveTab`, after the period picker:
 
@@ -1189,7 +1189,7 @@ Check:
 5. "Clear all" appears once a filter is set and resets everything but the month.
 6. Choosing "Custom range" from the period menu reveals two date inputs under More filters.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/ui/components/filter-bar.ts src/ui/budget-view.ts styles.css

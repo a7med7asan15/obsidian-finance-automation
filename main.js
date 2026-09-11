@@ -23,7 +23,7 @@ __export(main_exports, {
   default: () => FinanceAutomationPlugin
 });
 module.exports = __toCommonJS(main_exports);
-var import_obsidian8 = require("obsidian");
+var import_obsidian9 = require("obsidian");
 
 // src/constants.ts
 var VAULT_ROOT = "Budget/";
@@ -977,7 +977,7 @@ var FilterStore = class {
 };
 
 // src/ui/budget-view.ts
-var import_obsidian7 = require("obsidian");
+var import_obsidian8 = require("obsidian");
 
 // src/ui/components/period-picker.ts
 var import_obsidian6 = require("obsidian");
@@ -1054,6 +1054,186 @@ var PeriodPicker = class {
   }
 };
 
+// src/ui/components/filter-bar.ts
+var import_obsidian7 = require("obsidian");
+
+// src/domain/filter.ts
+function distinctCategories(records) {
+  const names = new Set(records.map((record) => record.category).filter(Boolean));
+  return [...names].sort((a, b) => a.localeCompare(b));
+}
+function distinctAccounts(records) {
+  const names = /* @__PURE__ */ new Set();
+  for (const record of records) {
+    if (record.fromAccount) names.add(record.fromAccount);
+    if (record.toAccount) names.add(record.toAccount);
+  }
+  return [...names].sort((a, b) => a.localeCompare(b));
+}
+
+// src/ui/components/filter-bar.ts
+var TYPE_OPTIONS = [
+  { value: "debit", label: "Spending" },
+  { value: "credit", label: "Income" },
+  { value: "transfer", label: "Transfers" },
+  { value: "fee", label: "Fees" }
+];
+var STATUS_OPTIONS = [
+  { value: "parsed", label: "Parsed" },
+  { value: "needs_review", label: "Needs review" },
+  { value: "pending", label: "Pending" }
+];
+var EXCLUDED_OPTIONS = [
+  { value: "hide", label: "Hide excluded" },
+  { value: "show", label: "Show excluded" },
+  { value: "only", label: "Only excluded" }
+];
+var FilterBar = class {
+  constructor(store, allRecords) {
+    this.store = store;
+    this.expanded = false;
+    this.allRecords = allRecords;
+  }
+  /**
+   * The view keeps one bar alive across redraws so the disclosure does not snap
+   * shut every time a filter changes, which means the record set it offers
+   * options from has to be refreshed rather than passed once at construction.
+   */
+  setRecords(allRecords) {
+    this.allRecords = allRecords;
+  }
+  render(container) {
+    const filter = this.store.get();
+    const bar = container.createDiv({ cls: "fin-filter-bar" });
+    const searchRow = bar.createDiv({ cls: "fin-search" });
+    const searchIcon = searchRow.createSpan({ cls: "fin-search-icon" });
+    (0, import_obsidian7.setIcon)(searchIcon, "search");
+    const input = searchRow.createEl("input", {
+      cls: "fin-search-input",
+      attr: { type: "search", placeholder: "Search merchant, SMS, category", value: filter.search }
+    });
+    let timer = null;
+    input.addEventListener("input", () => {
+      if (timer !== null) window.clearTimeout(timer);
+      timer = window.setTimeout(() => {
+        timer = null;
+        this.store.set({ search: input.value });
+      }, 200);
+    });
+    const chips = bar.createDiv({ cls: "fin-chip-row" });
+    this.multiChip(
+      chips,
+      "Category",
+      filter.categories,
+      distinctCategories(this.allRecords),
+      (next) => this.store.set({ categories: next })
+    );
+    this.multiChip(
+      chips,
+      "Account",
+      filter.accounts,
+      distinctAccounts(this.allRecords),
+      (next) => this.store.set({ accounts: next })
+    );
+    const more = chips.createEl("button", { cls: "fin-chip", text: this.expanded ? "Fewer filters" : "More filters" });
+    more.addEventListener("click", () => {
+      this.expanded = !this.expanded;
+      bar.remove();
+      this.render(container);
+    });
+    if (this.store.activeCount() > 0) {
+      const clear = chips.createEl("button", { cls: "fin-chip fin-chip-clear", text: "Clear all" });
+      clear.addEventListener("click", () => this.store.clearAll());
+    }
+    if (!this.expanded) return;
+    const extra = bar.createDiv({ cls: "fin-chip-row fin-chip-row-wrap" });
+    this.multiChip(
+      extra,
+      "Type",
+      filter.types,
+      TYPE_OPTIONS.map((option) => option.value),
+      (next) => this.store.set({ types: next }),
+      (value) => TYPE_OPTIONS.find((option) => option.value === value)?.label ?? value
+    );
+    this.multiChip(
+      extra,
+      "Status",
+      filter.statuses,
+      STATUS_OPTIONS.map((option) => option.value),
+      (next) => this.store.set({ statuses: next }),
+      (value) => STATUS_OPTIONS.find((option) => option.value === value)?.label ?? value
+    );
+    this.singleChip(
+      extra,
+      EXCLUDED_OPTIONS,
+      filter.excluded,
+      (value) => this.store.set({ excluded: value })
+    );
+    const amounts = bar.createDiv({ cls: "fin-amount-range" });
+    this.numberInput(amounts, "Min amount", filter.amountMin, (value) => this.store.set({ amountMin: value }));
+    this.numberInput(amounts, "Max amount", filter.amountMax, (value) => this.store.set({ amountMax: value }));
+    if (filter.period.unit === "custom") {
+      const range = bar.createDiv({ cls: "fin-amount-range" });
+      this.dateInput(range, "From", filter.period.from, (value) => this.store.setPeriod({ ...filter.period, from: value }));
+      this.dateInput(range, "To", filter.period.to, (value) => this.store.setPeriod({ ...filter.period, to: value }));
+    }
+  }
+  multiChip(container, label, selected, options, apply, labelOf = (value) => value) {
+    const text = selected.length === 0 ? label : selected.length === 1 ? labelOf(selected[0]) : `${label}: ${selected.length}`;
+    const button = container.createEl("button", { cls: "fin-chip", text });
+    button.toggleClass("is-active", selected.length > 0);
+    button.addEventListener("click", (event) => {
+      const menu = new import_obsidian7.Menu();
+      if (!options.length) {
+        menu.addItem((item) => item.setTitle("Nothing to filter by").setDisabled(true));
+      }
+      for (const option of options) {
+        menu.addItem(
+          (item) => item.setTitle(labelOf(option)).setChecked(selected.includes(option)).onClick(() => {
+            apply(selected.includes(option) ? selected.filter((item2) => item2 !== option) : [...selected, option]);
+          })
+        );
+      }
+      if (selected.length) {
+        menu.addSeparator();
+        menu.addItem((item) => item.setTitle(`Clear ${label.toLowerCase()}`).onClick(() => apply([])));
+      }
+      menu.showAtMouseEvent(event);
+    });
+  }
+  singleChip(container, options, selected, apply) {
+    const current = options.find((option) => option.value === selected) ?? options[0];
+    const button = container.createEl("button", { cls: "fin-chip", text: current.label });
+    button.toggleClass("is-active", selected !== options[0].value);
+    button.addEventListener("click", (event) => {
+      const menu = new import_obsidian7.Menu();
+      for (const option of options) {
+        menu.addItem(
+          (item) => item.setTitle(option.label).setChecked(option.value === selected).onClick(() => apply(option.value))
+        );
+      }
+      menu.showAtMouseEvent(event);
+    });
+  }
+  numberInput(container, placeholder, value, apply) {
+    const input = container.createEl("input", {
+      cls: "fin-range-input",
+      attr: { type: "number", inputmode: "decimal", placeholder, value: value === null ? "" : String(value) }
+    });
+    input.addEventListener("change", () => {
+      const parsed = Number(input.value);
+      apply(input.value.trim() === "" || !Number.isFinite(parsed) ? null : parsed);
+    });
+  }
+  dateInput(container, placeholder, value, apply) {
+    const input = container.createEl("input", {
+      cls: "fin-range-input",
+      attr: { type: "date", "aria-label": placeholder, value: value ?? "" }
+    });
+    input.addEventListener("change", () => apply(input.value));
+  }
+};
+
 // src/ui/budget-view.ts
 var BUDGET_VIEW_TYPE = "finance-budget-view";
 var TABS = [
@@ -1061,10 +1241,11 @@ var TABS = [
   { id: "accounts", label: "Accounts" },
   { id: "stats", label: "Stats" }
 ];
-var BudgetView = class extends import_obsidian7.ItemView {
+var BudgetView = class extends import_obsidian8.ItemView {
   constructor(leaf, plugin) {
     super(leaf);
     this.activeTab = "transactions";
+    this.filterBar = null;
     this.unsubscribe = [];
     this.plugin = plugin;
   }
@@ -1095,6 +1276,7 @@ var BudgetView = class extends import_obsidian7.ItemView {
   async onClose() {
     for (const stop of this.unsubscribe) stop();
     this.unsubscribe = [];
+    this.filterBar = null;
   }
   renderTabBar() {
     this.tabBarEl.empty();
@@ -1113,6 +1295,10 @@ var BudgetView = class extends import_obsidian7.ItemView {
   renderActiveTab() {
     this.headerEl.empty();
     new PeriodPicker(this.plugin.store).render(this.headerEl);
+    const all = this.plugin.index.transactions();
+    if (!this.filterBar) this.filterBar = new FilterBar(this.plugin.store, all);
+    else this.filterBar.setRecords(all);
+    this.filterBar.render(this.headerEl);
     this.bodyEl.empty();
     if (this.activeTab === "transactions") this.renderTransactions();
     else if (this.activeTab === "accounts") this.renderAccounts();
@@ -1133,7 +1319,7 @@ var BudgetView = class extends import_obsidian7.ItemView {
 // src/main.ts
 var SMS_PATTERNS_PATH = `${SETTINGS_DIR}/sms_patterns.json`;
 var PARSER_OWNED = /* @__PURE__ */ new Set(["status", "parser_confidence", "transaction_id"]);
-var FinanceAutomationPlugin = class extends import_obsidian8.Plugin {
+var FinanceAutomationPlugin = class extends import_obsidian9.Plugin {
   constructor() {
     super(...arguments);
     this.settings = { ...DEFAULT_SETTINGS };
@@ -1180,7 +1366,7 @@ var FinanceAutomationPlugin = class extends import_obsidian8.Plugin {
       name: "Apply exclusion rules to all transactions",
       callback: async () => {
         const updated = await this.applyRulesToAll();
-        new import_obsidian8.Notice(`Finance: updated ${updated} transaction(s).`);
+        new import_obsidian9.Notice(`Finance: updated ${updated} transaction(s).`);
       }
     });
     this.addSettingTab(new FinanceAutomationSettingTab(this.app, this));
@@ -1230,10 +1416,10 @@ var FinanceAutomationPlugin = class extends import_obsidian8.Plugin {
   async handleCaptureLink(kind, params) {
     try {
       const file = kind === "sms" ? await createRawSmsTransaction(this.app, params, await this.loadPatterns()) : await createStructuredTransaction(this.app, params);
-      new import_obsidian8.Notice(`Finance: captured ${file.path}.`, 5e3);
+      new import_obsidian9.Notice(`Finance: captured ${file.path}.`, 5e3);
     } catch (error) {
       console.error("Finance capture link failed", error);
-      new import_obsidian8.Notice(`Finance capture failed: ${error.message}`, 1e4);
+      new import_obsidian9.Notice(`Finance capture failed: ${error.message}`, 1e4);
     }
   }
   async loadPatterns() {
@@ -1260,20 +1446,20 @@ var FinanceAutomationPlugin = class extends import_obsidian8.Plugin {
   async runFinance(showNotice) {
     if (this.running) {
       this.queued = true;
-      if (showNotice) new import_obsidian8.Notice("Finance processing is already running; another pass is queued.");
+      if (showNotice) new import_obsidian9.Notice("Finance processing is already running; another pass is queued.");
       return;
     }
     this.running = true;
     this.setStatus("running\u2026");
-    if (showNotice) new import_obsidian8.Notice("Finance: processing\u2026");
+    if (showNotice) new import_obsidian9.Notice("Finance: processing\u2026");
     try {
       const updated = await this.processPending();
       this.setStatus("ready");
-      if (showNotice) new import_obsidian8.Notice(`Finance: updated ${updated} transaction(s).`, 6e3);
+      if (showNotice) new import_obsidian9.Notice(`Finance: updated ${updated} transaction(s).`, 6e3);
     } catch (error) {
       this.setStatus("error");
       console.error("Finance automation failed", error);
-      new import_obsidian8.Notice(`Finance automation failed: ${error.message}`, 1e4);
+      new import_obsidian9.Notice(`Finance automation failed: ${error.message}`, 1e4);
     } finally {
       this.running = false;
       if (this.queued) {
