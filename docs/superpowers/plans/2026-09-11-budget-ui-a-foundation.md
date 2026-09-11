@@ -3081,7 +3081,7 @@ git commit -m "feat: add vault JSON and frontmatter writing"
     - `subscribe(listener: () => void): () => void` — returns an unsubscribe function
     - `refreshPath(path: string): void`
 
-- [ ] **Step 1: Write `src/data/index-store.ts`**
+- [x] **Step 1: Write `src/data/index-store.ts`**
 
 ```ts
 import { App, Plugin, TFile } from "obsidian";
@@ -3194,12 +3194,12 @@ export class TransactionIndex {
 }
 ```
 
-- [ ] **Step 2: Typecheck**
+- [x] **Step 2: Typecheck**
 
 Run: `npm run typecheck`
 Expected: exits 0.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add src/data/index-store.ts
