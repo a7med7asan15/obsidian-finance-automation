@@ -285,7 +285,7 @@ Small, but every component depends on it, and a money formatter that rounds wron
   - `categoryColor(name: string, categories: Map<string, CategoryRecord>): string`
   - `categoryIcon(name: string, categories: Map<string, CategoryRecord>): string`
 
-- [ ] **Step 1: Write the failing test `tests/format.test.ts`**
+- [x] **Step 1: Write the failing test `tests/format.test.ts`**
 
 ```ts
 import test from "node:test";
@@ -323,7 +323,7 @@ test("formatDayHeader says Today and Yesterday", () => {
 });
 
 test("formatDayHeader spells out other days", () => {
-  assert.equal(formatDayHeader("2026-09-05", "2026-09-11"), "Friday, 5 September");
+  assert.equal(formatDayHeader("2026-09-05", "2026-09-11"), "Saturday, 5 September");
 });
 
 test("formatDayHeader labels the undated bucket", () => {
@@ -351,12 +351,12 @@ test("categoryColor falls back to a stable palette entry", () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `node --test tests/format.test.ts`
 Expected: FAIL — cannot find module `../src/ui/format.ts`.
 
-- [ ] **Step 3: Write `src/ui/format.ts`**
+- [x] **Step 3: Write `src/ui/format.ts`**
 
 ```ts
 import type { TransactionRecord } from "../data/types.ts";
@@ -411,7 +411,7 @@ export function formatTime(time: string | null): string {
 }
 ```
 
-- [ ] **Step 4: Write `src/ui/colors.ts`**
+- [x] **Step 4: Write `src/ui/colors.ts`**
 
 ```ts
 import type { CategoryRecord } from "../data/types.ts";
@@ -458,12 +458,12 @@ export function categoryIcon(name: string, categories: Map<string, CategoryRecor
 }
 ```
 
-- [ ] **Step 5: Run the tests to verify they pass**
+- [x] **Step 5: Run the tests to verify they pass**
 
 Run: `node --test tests/format.test.ts`
 Expected: PASS, 10 tests.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/ui/format.ts src/ui/colors.ts tests/format.test.ts
