@@ -476,7 +476,7 @@ Every date bucket in the app comes from here. It is separated from everything el
   - `addMonths(anchor: string, delta: number): string`
   - `daysBetween(from: string, to: string): string[]`
 
-- [ ] **Step 1: Write the failing test `tests/dates.test.ts`**
+- [x] **Step 1: Write the failing test `tests/dates.test.ts`**
 
 ```ts
 import test from "node:test";
@@ -586,12 +586,12 @@ test("daysBetween is inclusive at both ends", () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `node --test tests/dates.test.ts`
 Expected: FAIL — cannot find module `../src/domain/dates.ts`.
 
-- [ ] **Step 3: Write `src/domain/dates.ts`**
+- [x] **Step 3: Write `src/domain/dates.ts`**
 
 Dates are handled as plain `YYYY-MM-DD` strings, never `Date` objects, past the parsing boundary. Strings in that format sort and compare lexicographically, which removes a whole category of timezone bug from the filter and aggregate code.
 
@@ -727,14 +727,14 @@ export function daysBetween(from: string, to: string): string[] {
 }
 ```
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 Run: `node --test tests/dates.test.ts`
 Expected: PASS, 17 tests.
 
 If `periodLabel` fails on the empty-anchor case, that is expected — `resolvePeriod` handles an empty anchor but `periodLabel` assumes a valid one. The store never produces an empty anchor after initialisation (Plan B, Task 1).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/domain/dates.ts tests/dates.test.ts
