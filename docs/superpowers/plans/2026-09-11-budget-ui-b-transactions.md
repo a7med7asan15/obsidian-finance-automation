@@ -491,7 +491,7 @@ The first thing you can look at. It delivers an empty Budget view with a working
   - `plugin.activateBudgetView(): Promise<void>`
   - `plugin.store: FilterStore`
 
-- [ ] **Step 1: Write the design tokens into `styles.css`**
+- [x] **Step 1: Write the design tokens into `styles.css`**
 
 Append to the existing file, keeping the spinner rules already there.
 
@@ -575,7 +575,7 @@ Append to the existing file, keeping the spinner rules already there.
 }
 ```
 
-- [ ] **Step 2: Write `src/ui/budget-view.ts`**
+- [x] **Step 2: Write `src/ui/budget-view.ts`**
 
 ```ts
 import { ItemView, WorkspaceLeaf } from "obsidian";
@@ -678,7 +678,7 @@ export class BudgetView extends ItemView {
 }
 ```
 
-- [ ] **Step 3: Register the view in `src/main.ts`**
+- [x] **Step 3: Register the view in `src/main.ts`**
 
 In `onload`, before the existing ribbon icon:
 
@@ -730,7 +730,7 @@ Check:
 4. Switch between a light and a dark theme; the tab bar stays legible in both.
 5. On iPhone, the view fills the screen and the tabs are comfortable to hit.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/ui/budget-view.ts src/main.ts styles.css

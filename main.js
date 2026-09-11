@@ -23,7 +23,7 @@ __export(main_exports, {
   default: () => FinanceAutomationPlugin
 });
 module.exports = __toCommonJS(main_exports);
-var import_obsidian6 = require("obsidian");
+var import_obsidian7 = require("obsidian");
 
 // src/constants.ts
 var VAULT_ROOT = "Budget/";
@@ -115,6 +115,21 @@ function toDateParts(timestamp) {
   if (Number.isNaN(instant.getTime())) return null;
   const { date, time } = formatInCairo(instant);
   return { date, month: date.slice(0, 7), year: date.slice(0, 4), time, epoch: instant.getTime() };
+}
+function cairoToday(now = /* @__PURE__ */ new Date()) {
+  return formatInCairo(now).date;
+}
+function addMonths(anchor, delta) {
+  const [year, month] = anchor.split("-").map(Number);
+  const total = year * 12 + (month - 1) + delta;
+  const nextYear = Math.floor(total / 12);
+  const nextMonth = total % 12 + 1;
+  return `${nextYear}-${String(nextMonth).padStart(2, "0")}`;
+}
+function stepPeriod(period, delta) {
+  if (period.unit === "month") return { ...period, anchor: addMonths(period.anchor, delta) };
+  if (period.unit === "year") return { ...period, anchor: String(Number(period.anchor) + delta) };
+  return period;
 }
 
 // src/data/records.ts
@@ -851,10 +866,166 @@ var FinanceAutomationSettingTab = class extends import_obsidian5.PluginSettingTa
   }
 };
 
+// src/data/types.ts
+var DEFAULT_FILTER = {
+  period: { unit: "month", anchor: "", from: null, to: null },
+  categories: [],
+  accounts: [],
+  types: [],
+  statuses: [],
+  search: "",
+  amountMin: null,
+  amountMax: null,
+  excluded: "hide"
+};
+
+// src/store/filter-store.ts
+var FilterStore = class {
+  constructor(saved, today = cairoToday()) {
+    this.listeners = /* @__PURE__ */ new Set();
+    const { period: _ignored, ...rest } = saved ?? {};
+    this.filter = {
+      ...DEFAULT_FILTER,
+      ...rest,
+      period: { unit: "month", anchor: today.slice(0, 7), from: null, to: null }
+    };
+  }
+  get() {
+    return this.filter;
+  }
+  set(patch) {
+    this.filter = { ...this.filter, ...patch };
+    for (const listener of this.listeners) listener(this.filter);
+  }
+  setPeriod(period) {
+    this.set({ period });
+  }
+  step(delta) {
+    this.set({ period: stepPeriod(this.filter.period, delta) });
+  }
+  toggle(key, name) {
+    const current = this.filter[key];
+    const next = current.includes(name) ? current.filter((item) => item !== name) : [...current, name];
+    this.set({ [key]: next });
+  }
+  toggleCategory(name) {
+    this.toggle("categories", name);
+  }
+  toggleAccount(name) {
+    this.toggle("accounts", name);
+  }
+  clearAll() {
+    this.set({
+      categories: [],
+      accounts: [],
+      types: [],
+      statuses: [],
+      search: "",
+      amountMin: null,
+      amountMax: null,
+      excluded: DEFAULT_FILTER.excluded
+    });
+  }
+  activeCount() {
+    const filter = this.filter;
+    let count = 0;
+    if (filter.categories.length) count += 1;
+    if (filter.accounts.length) count += 1;
+    if (filter.types.length) count += 1;
+    if (filter.statuses.length) count += 1;
+    if (filter.search.trim()) count += 1;
+    if (filter.amountMin !== null || filter.amountMax !== null) count += 1;
+    if (filter.excluded !== DEFAULT_FILTER.excluded) count += 1;
+    return count;
+  }
+  subscribe(listener) {
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
+  }
+  serialize() {
+    const { period: _period, ...rest } = this.filter;
+    return rest;
+  }
+};
+
+// src/ui/budget-view.ts
+var import_obsidian6 = require("obsidian");
+var BUDGET_VIEW_TYPE = "finance-budget-view";
+var TABS = [
+  { id: "transactions", label: "Transactions" },
+  { id: "accounts", label: "Accounts" },
+  { id: "stats", label: "Stats" }
+];
+var BudgetView = class extends import_obsidian6.ItemView {
+  constructor(leaf, plugin) {
+    super(leaf);
+    this.activeTab = "transactions";
+    this.unsubscribe = [];
+    this.plugin = plugin;
+  }
+  getViewType() {
+    return BUDGET_VIEW_TYPE;
+  }
+  getDisplayText() {
+    return "Budget";
+  }
+  getIcon() {
+    return "wallet";
+  }
+  async onOpen() {
+    const root = this.contentEl;
+    root.empty();
+    root.addClass("finance-budget");
+    this.tabBarEl = root.createDiv({ cls: "fin-tabs" });
+    this.bodyEl = root.createDiv({ cls: "fin-tab-body" });
+    this.renderTabBar();
+    this.renderActiveTab();
+    this.unsubscribe.push(this.plugin.index.subscribe(() => this.renderActiveTab()));
+    this.unsubscribe.push(this.plugin.store.subscribe(() => {
+      void this.plugin.persistFilter();
+      this.renderActiveTab();
+    }));
+  }
+  async onClose() {
+    for (const stop of this.unsubscribe) stop();
+    this.unsubscribe = [];
+  }
+  renderTabBar() {
+    this.tabBarEl.empty();
+    for (const tab of TABS) {
+      const button = this.tabBarEl.createEl("button", { cls: "fin-tab", text: tab.label });
+      button.toggleClass("is-active", tab.id === this.activeTab);
+      button.setAttribute("aria-selected", String(tab.id === this.activeTab));
+      button.addEventListener("click", () => {
+        if (this.activeTab === tab.id) return;
+        this.activeTab = tab.id;
+        this.renderTabBar();
+        this.renderActiveTab();
+      });
+    }
+  }
+  renderActiveTab() {
+    this.bodyEl.empty();
+    if (this.activeTab === "transactions") this.renderTransactions();
+    else if (this.activeTab === "accounts") this.renderAccounts();
+    else this.renderStats();
+  }
+  // Filled in by Task 6 (transactions) and Plan C (accounts, stats).
+  renderTransactions() {
+    this.bodyEl.createEl("p", { text: "Transactions" });
+  }
+  renderAccounts() {
+    this.bodyEl.createEl("p", { text: "Accounts" });
+  }
+  renderStats() {
+    this.bodyEl.createEl("p", { text: "Stats" });
+  }
+};
+
 // src/main.ts
 var SMS_PATTERNS_PATH = `${SETTINGS_DIR}/sms_patterns.json`;
 var PARSER_OWNED = /* @__PURE__ */ new Set(["status", "parser_confidence", "transaction_id"]);
-var FinanceAutomationPlugin = class extends import_obsidian6.Plugin {
+var FinanceAutomationPlugin = class extends import_obsidian7.Plugin {
   constructor() {
     super(...arguments);
     this.settings = { ...DEFAULT_SETTINGS };
@@ -868,10 +1039,19 @@ var FinanceAutomationPlugin = class extends import_obsidian6.Plugin {
     this.ignoreWatchUntil = /* @__PURE__ */ new Map();
   }
   async onload() {
-    this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+    const data = await this.loadData() ?? {};
+    this.settings = Object.assign({}, DEFAULT_SETTINGS, data);
     this.index = new TransactionIndex(this.app);
+    this.store = new FilterStore(data.filter ?? null);
     this.status = this.addStatusBarItem();
     this.setStatus("ready");
+    this.registerView(BUDGET_VIEW_TYPE, (leaf) => new BudgetView(leaf, this));
+    this.addRibbonIcon("wallet", "Open Budget", () => void this.activateBudgetView());
+    this.addCommand({
+      id: "open-budget-view",
+      name: "Open Budget",
+      callback: () => void this.activateBudgetView()
+    });
     this.registerObsidianProtocolHandler("finance-sms", async (params) => {
       await this.handleCaptureLink("sms", params);
     });
@@ -892,7 +1072,7 @@ var FinanceAutomationPlugin = class extends import_obsidian6.Plugin {
       name: "Apply exclusion rules to all transactions",
       callback: async () => {
         const updated = await this.applyRulesToAll();
-        new import_obsidian6.Notice(`Finance: updated ${updated} transaction(s).`);
+        new import_obsidian7.Notice(`Finance: updated ${updated} transaction(s).`);
       }
     });
     this.addSettingTab(new FinanceAutomationSettingTab(this.app, this));
@@ -922,15 +1102,30 @@ var FinanceAutomationPlugin = class extends import_obsidian6.Plugin {
     if (this.startupTimer) window.clearTimeout(this.startupTimer);
   }
   async saveSettings() {
-    await this.saveData(this.settings);
+    const data = await this.loadData() ?? {};
+    await this.saveData({ ...data, ...this.settings });
+  }
+  async activateBudgetView() {
+    const existing = this.app.workspace.getLeavesOfType(BUDGET_VIEW_TYPE);
+    if (existing.length) {
+      await this.app.workspace.revealLeaf(existing[0]);
+      return;
+    }
+    const leaf = this.app.workspace.getLeaf("tab");
+    await leaf.setViewState({ type: BUDGET_VIEW_TYPE, active: true });
+    await this.app.workspace.revealLeaf(leaf);
+  }
+  async persistFilter() {
+    const data = await this.loadData() ?? {};
+    await this.saveData({ ...data, filter: this.store.serialize() });
   }
   async handleCaptureLink(kind, params) {
     try {
       const file = kind === "sms" ? await createRawSmsTransaction(this.app, params, await this.loadPatterns()) : await createStructuredTransaction(this.app, params);
-      new import_obsidian6.Notice(`Finance: captured ${file.path}.`, 5e3);
+      new import_obsidian7.Notice(`Finance: captured ${file.path}.`, 5e3);
     } catch (error) {
       console.error("Finance capture link failed", error);
-      new import_obsidian6.Notice(`Finance capture failed: ${error.message}`, 1e4);
+      new import_obsidian7.Notice(`Finance capture failed: ${error.message}`, 1e4);
     }
   }
   async loadPatterns() {
@@ -957,20 +1152,20 @@ var FinanceAutomationPlugin = class extends import_obsidian6.Plugin {
   async runFinance(showNotice) {
     if (this.running) {
       this.queued = true;
-      if (showNotice) new import_obsidian6.Notice("Finance processing is already running; another pass is queued.");
+      if (showNotice) new import_obsidian7.Notice("Finance processing is already running; another pass is queued.");
       return;
     }
     this.running = true;
     this.setStatus("running\u2026");
-    if (showNotice) new import_obsidian6.Notice("Finance: processing\u2026");
+    if (showNotice) new import_obsidian7.Notice("Finance: processing\u2026");
     try {
       const updated = await this.processPending();
       this.setStatus("ready");
-      if (showNotice) new import_obsidian6.Notice(`Finance: updated ${updated} transaction(s).`, 6e3);
+      if (showNotice) new import_obsidian7.Notice(`Finance: updated ${updated} transaction(s).`, 6e3);
     } catch (error) {
       this.setStatus("error");
       console.error("Finance automation failed", error);
-      new import_obsidian6.Notice(`Finance automation failed: ${error.message}`, 1e4);
+      new import_obsidian7.Notice(`Finance automation failed: ${error.message}`, 1e4);
     } finally {
       this.running = false;
       if (this.queued) {

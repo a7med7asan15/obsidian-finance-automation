@@ -15,6 +15,8 @@ import { resolveExclusion } from "./domain/exclusion.ts";
 import { parseSms } from "./domain/parser/sms.ts";
 import type { AccountConfig, CategoryRules, SmsPatterns } from "./domain/parser/sms.ts";
 import { DEFAULT_SETTINGS, FinanceAutomationSettingTab } from "./settings.ts";
+import { FilterStore } from "./store/filter-store.ts";
+import { BUDGET_VIEW_TYPE, BudgetView } from "./ui/budget-view.ts";
 import type { FinanceSettings } from "./settings.ts";
 
 const SMS_PATTERNS_PATH = `${SETTINGS_DIR}/sms_patterns.json`;
@@ -29,6 +31,7 @@ interface VaultConfig {
 export default class FinanceAutomationPlugin extends Plugin {
   override settings: FinanceSettings = { ...DEFAULT_SETTINGS };
   index!: TransactionIndex;
+  store!: FilterStore;
 
   private running = false;
   private queued = false;
@@ -40,10 +43,22 @@ export default class FinanceAutomationPlugin extends Plugin {
   private readonly ignoreWatchUntil = new Map<string, number>();
 
   override async onload(): Promise<void> {
-    this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+    const data = (await this.loadData()) ?? {};
+    this.settings = Object.assign({}, DEFAULT_SETTINGS, data);
     this.index = new TransactionIndex(this.app);
+    this.store = new FilterStore(data.filter ?? null);
     this.status = this.addStatusBarItem();
     this.setStatus("ready");
+
+    this.registerView(BUDGET_VIEW_TYPE, (leaf) => new BudgetView(leaf, this));
+
+    this.addRibbonIcon("wallet", "Open Budget", () => void this.activateBudgetView());
+
+    this.addCommand({
+      id: "open-budget-view",
+      name: "Open Budget",
+      callback: () => void this.activateBudgetView(),
+    });
 
     this.registerObsidianProtocolHandler("finance-sms", async (params) => {
       await this.handleCaptureLink("sms", params as ProtocolParams);
@@ -112,7 +127,27 @@ export default class FinanceAutomationPlugin extends Plugin {
   }
 
   async saveSettings(): Promise<void> {
-    await this.saveData(this.settings);
+    // Settings live at the top level of plugin data alongside the saved filter,
+    // so the whole object is read back before writing.
+    const data = (await this.loadData()) ?? {};
+    await this.saveData({ ...data, ...this.settings });
+  }
+
+  async activateBudgetView(): Promise<void> {
+    const existing = this.app.workspace.getLeavesOfType(BUDGET_VIEW_TYPE);
+    if (existing.length) {
+      await this.app.workspace.revealLeaf(existing[0]);
+      return;
+    }
+    // getLeaf("tab") on desktop, the main area on mobile — both give a full-width pane.
+    const leaf = this.app.workspace.getLeaf("tab");
+    await leaf.setViewState({ type: BUDGET_VIEW_TYPE, active: true });
+    await this.app.workspace.revealLeaf(leaf);
+  }
+
+  async persistFilter(): Promise<void> {
+    const data = (await this.loadData()) ?? {};
+    await this.saveData({ ...data, filter: this.store.serialize() });
   }
 
   private async handleCaptureLink(kind: "sms" | "transaction", params: ProtocolParams): Promise<void> {
