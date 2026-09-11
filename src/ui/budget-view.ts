@@ -4,6 +4,7 @@ import { PeriodPicker } from "./components/period-picker.ts";
 import { FilterBar } from "./components/filter-bar.ts";
 import { TransactionsTab } from "./tabs/transactions-tab.ts";
 import { AccountsTab } from "./tabs/accounts-tab.ts";
+import { StatsTab } from "./tabs/stats-tab.ts";
 import type FinanceAutomationPlugin from "../main.ts";
 
 export const BUDGET_VIEW_TYPE = "finance-budget-view";
@@ -25,6 +26,7 @@ export class BudgetView extends ItemView {
   private filterBar: FilterBar | null = null;
   private transactionsTab!: TransactionsTab;
   private accountsTab!: AccountsTab;
+  private statsTab!: StatsTab;
   private unsubscribe: Array<() => void> = [];
 
   constructor(leaf: WorkspaceLeaf, plugin: FinanceAutomationPlugin) {
@@ -51,6 +53,7 @@ export class BudgetView extends ItemView {
 
     this.transactionsTab = new TransactionsTab(this.plugin);
     this.accountsTab = new AccountsTab(this.plugin);
+    this.statsTab = new StatsTab(this.plugin);
 
     this.tabBarEl = root.createDiv({ cls: "fin-tabs" });
     this.headerEl = root.createDiv({ cls: "fin-header" });
@@ -124,6 +127,6 @@ export class BudgetView extends ItemView {
   }
 
   private renderStats(): void {
-    this.bodyEl.createEl("p", { text: "Stats" });
+    this.statsTab.render(this.bodyEl);
   }
 }

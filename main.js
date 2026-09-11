@@ -178,6 +178,16 @@ function periodLabel(period) {
   const [year, month] = period.anchor.split("-");
   return `${MONTH_NAMES[Number(month) - 1]} ${year}`;
 }
+function daysBetween(from, to) {
+  const days = [];
+  let cursor = Date.parse(`${from}T00:00:00Z`);
+  const end = Date.parse(`${to}T00:00:00Z`);
+  while (cursor <= end) {
+    days.push(new Date(cursor).toISOString().slice(0, 10));
+    cursor += 864e5;
+  }
+  return days;
+}
 
 // src/data/records.ts
 var TYPES = ["debit", "credit", "transfer", "fee"];
@@ -1627,6 +1637,52 @@ function totalsByCurrency(records) {
   }
   return result;
 }
+function sumBy(records, currency, keyOf, labelOf) {
+  const buckets = /* @__PURE__ */ new Map();
+  for (const record of records) {
+    if (!counts(record) || record.currency !== currency || !isExpense(record)) continue;
+    const key2 = keyOf(record);
+    if (!key2) continue;
+    const bucket = buckets.get(key2) ?? { label: labelOf(record), amount: 0, count: 0 };
+    bucket.amount += magnitude(record);
+    bucket.count += 1;
+    buckets.set(key2, bucket);
+  }
+  return [...buckets].map(([key2, bucket]) => ({ key: key2, ...bucket })).sort((a, b) => b.amount - a.amount || a.label.localeCompare(b.label));
+}
+function spendByCategory(records, currency) {
+  return sumBy(records, currency, (record) => record.category, (record) => record.category).map(({ label, amount, count }) => ({ category: label, amount, count }));
+}
+function spendByMerchant(records, currency, limit) {
+  return sumBy(
+    records,
+    currency,
+    (record) => record.merchant ? record.merchant.toLowerCase() : null,
+    (record) => record.merchant
+  ).slice(0, limit).map(({ label, amount, count }) => ({ merchant: label, amount, count }));
+}
+function spendByDay(records, currency, from, to) {
+  const byDate = /* @__PURE__ */ new Map();
+  for (const record of records) {
+    if (!counts(record) || record.currency !== currency || !isExpense(record) || !record.date) continue;
+    byDate.set(record.date, (byDate.get(record.date) ?? 0) + magnitude(record));
+  }
+  return daysBetween(from, to).map((date) => ({ date, amount: byDate.get(date) ?? 0 }));
+}
+function spendByMonth(records, currency, fromMonth, toMonth) {
+  const byMonth = /* @__PURE__ */ new Map();
+  for (const record of records) {
+    if (!counts(record) || record.currency !== currency || !isExpense(record) || !record.month) continue;
+    byMonth.set(record.month, (byMonth.get(record.month) ?? 0) + magnitude(record));
+  }
+  const months = [];
+  let cursor = fromMonth;
+  while (cursor <= toMonth) {
+    months.push({ month: cursor, amount: byMonth.get(cursor) ?? 0 });
+    cursor = addMonths(cursor, 1);
+  }
+  return months;
+}
 function groupByDay(records) {
   const buckets = /* @__PURE__ */ new Map();
   for (const record of records) {
@@ -1636,6 +1692,15 @@ function groupByDay(records) {
     buckets.set(date, bucket);
   }
   return [...buckets].sort((a, b) => b[0].localeCompare(a[0])).map(([date, dayRecords]) => ({ date, records: dayRecords, totals: totalsByCurrency(dayRecords) }));
+}
+function primaryCurrency(records) {
+  const counted = /* @__PURE__ */ new Map();
+  for (const record of records) {
+    if (!record.currency) continue;
+    counted.set(record.currency, (counted.get(record.currency) ?? 0) + 1);
+  }
+  const ranked = [...counted].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+  return ranked[0]?.[0] ?? "EGP";
 }
 
 // src/ui/format.ts
@@ -2118,6 +2183,431 @@ var AccountsTab = class {
   }
 };
 
+// src/domain/budgets.ts
+var WARN_AT = 0.8;
+function budgetProgress(categories, records) {
+  const spendByCurrency = /* @__PURE__ */ new Map();
+  const progress = [];
+  for (const category of categories) {
+    if (category.monthlyBudget === null || category.monthlyBudget <= 0) continue;
+    if (!spendByCurrency.has(category.currency)) {
+      const totals = new Map(
+        spendByCategory(records, category.currency).map((item) => [item.category, item.amount])
+      );
+      spendByCurrency.set(category.currency, totals);
+    }
+    const spent = spendByCurrency.get(category.currency).get(category.name) ?? 0;
+    const budget = category.monthlyBudget;
+    const ratio = spent / budget;
+    progress.push({
+      category: category.name,
+      currency: category.currency,
+      budget,
+      spent,
+      remaining: budget - spent,
+      ratio,
+      level: ratio > 1 ? "over" : ratio >= WARN_AT ? "warn" : "ok"
+    });
+  }
+  return progress.sort((a, b) => b.ratio - a.ratio || a.category.localeCompare(b.category));
+}
+
+// src/ui/components/panel.ts
+function renderPanel(container, title, subtitle) {
+  const panel = container.createDiv({ cls: "fin-panel" });
+  const head = panel.createDiv({ cls: "fin-panel-head" });
+  head.createEl("h3", { cls: "fin-panel-title", text: title });
+  if (subtitle) head.createSpan({ cls: "fin-panel-subtitle", text: subtitle });
+  return panel.createDiv({ cls: "fin-panel-body" });
+}
+
+// src/ui/charts/svg.ts
+var SVG_NS = "http://www.w3.org/2000/svg";
+function svgEl(tag, attrs = {}) {
+  const element = document.createElementNS(SVG_NS, tag);
+  for (const [name, value] of Object.entries(attrs)) {
+    element.setAttribute(name, String(value));
+  }
+  return element;
+}
+function createChart(width, height, title) {
+  const svg = svgEl("svg", {
+    viewBox: `0 0 ${width} ${height}`,
+    role: "img",
+    "aria-label": title,
+    preserveAspectRatio: "xMidYMid meet"
+  });
+  svg.appendChild(svgEl("title")).textContent = title;
+  return svg;
+}
+function linearScale(domainMax, rangeMax) {
+  if (domainMax <= 0) return () => 0;
+  return (value) => value / domainMax * rangeMax;
+}
+function niceMax(value) {
+  if (!Number.isFinite(value) || value <= 0) return 1;
+  const magnitude2 = 10 ** Math.floor(Math.log10(value));
+  const normalized = value / magnitude2;
+  const step = normalized <= 1 ? 1 : normalized <= 2 ? 2 : normalized <= 2.5 ? 2.5 : normalized <= 5 ? 5 : 10;
+  return step * magnitude2;
+}
+function pointOnCircle(cx, cy, radius, angle) {
+  return [cx + radius * Math.sin(angle), cy - radius * Math.cos(angle)];
+}
+function arcPath(cx, cy, radius, innerRadius, startAngle, endAngle) {
+  const sweep = Math.min(endAngle - startAngle, Math.PI * 2 - 1e-4);
+  const end = startAngle + sweep;
+  const largeArc = sweep > Math.PI ? 1 : 0;
+  const [outerStartX, outerStartY] = pointOnCircle(cx, cy, radius, startAngle);
+  const [outerEndX, outerEndY] = pointOnCircle(cx, cy, radius, end);
+  const [innerEndX, innerEndY] = pointOnCircle(cx, cy, innerRadius, end);
+  const [innerStartX, innerStartY] = pointOnCircle(cx, cy, innerRadius, startAngle);
+  return [
+    `M ${outerStartX.toFixed(2)} ${outerStartY.toFixed(2)}`,
+    `A ${radius} ${radius} 0 ${largeArc} 1 ${outerEndX.toFixed(2)} ${outerEndY.toFixed(2)}`,
+    `L ${innerEndX.toFixed(2)} ${innerEndY.toFixed(2)}`,
+    `A ${innerRadius} ${innerRadius} 0 ${largeArc} 0 ${innerStartX.toFixed(2)} ${innerStartY.toFixed(2)}`,
+    "Z"
+  ].join(" ");
+}
+
+// src/ui/charts/donut.ts
+function renderDonut(container, data, options) {
+  const positive = data.filter((item) => item.value > 0);
+  if (!positive.length) {
+    container.createEl("p", { cls: "fin-panel-empty", text: "Nothing to show for this period." });
+    return;
+  }
+  const size = 200;
+  const centre = size / 2;
+  const radius = 88;
+  const inner = 58;
+  const total = positive.reduce((sum, item) => sum + item.value, 0);
+  const svg = createChart(size, size, `Spending by category, total ${formatAmount(options.total)} ${options.currency}`);
+  svg.addClass("fin-donut");
+  let angle = 0;
+  for (const item of positive) {
+    const sweep = item.value / total * Math.PI * 2;
+    const path = svgEl("path", {
+      d: arcPath(centre, centre, radius, inner, angle, angle + sweep),
+      fill: item.color
+    });
+    path.addClass("fin-donut-slice");
+    const share = (item.value / total * 100).toFixed(1);
+    svg.appendChild(path).appendChild(svgEl("title")).textContent = `${item.label}: ${formatAmount(item.value)} ${options.currency} (${share}%)`;
+    if (options.onSelect) {
+      path.addClass("is-clickable");
+      path.addEventListener("click", () => options.onSelect(item.label));
+    }
+    angle += sweep;
+  }
+  const centreValue = svgEl("text", {
+    x: centre,
+    y: centre - 2,
+    "text-anchor": "middle",
+    "dominant-baseline": "middle"
+  });
+  centreValue.addClass("fin-donut-total");
+  centreValue.textContent = formatAmount(options.total);
+  svg.appendChild(centreValue);
+  const centreLabel = svgEl("text", {
+    x: centre,
+    y: centre + 18,
+    "text-anchor": "middle",
+    "dominant-baseline": "middle"
+  });
+  centreLabel.addClass("fin-donut-currency");
+  centreLabel.textContent = options.currency;
+  svg.appendChild(centreLabel);
+  container.appendChild(svg);
+  const legend = container.createEl("ul", { cls: "fin-legend" });
+  for (const item of positive) {
+    const row = legend.createEl("li", { cls: "fin-legend-row" });
+    const swatch = row.createSpan({ cls: "fin-legend-swatch" });
+    swatch.style.background = item.color;
+    row.createSpan({ cls: "fin-legend-label", text: item.label });
+    row.createSpan({
+      cls: "fin-legend-value fin-amount",
+      text: `${formatAmount(item.value)} \xB7 ${(item.value / total * 100).toFixed(0)}%`
+    });
+    if (options.onSelect) {
+      row.addClass("is-clickable");
+      row.addEventListener("click", () => options.onSelect(item.label));
+    }
+  }
+}
+
+// src/ui/charts/bars.ts
+function renderBars(container, data, options) {
+  if (!data.length) {
+    container.createEl("p", { cls: "fin-panel-empty", text: "Nothing to show for this period." });
+    return;
+  }
+  const width = 320;
+  const height = 140;
+  const padBottom = 20;
+  const plotHeight = height - padBottom;
+  const max = niceMax(Math.max(...data.map((item) => item.value)));
+  const scale = linearScale(max, plotHeight - 4);
+  const slot = width / data.length;
+  const barWidth = Math.max(2, Math.min(slot - 2, 22));
+  const svg = createChart(width, height, `Spending over time, peak ${formatAmount(max)} ${options.currency}`);
+  svg.addClass("fin-bars");
+  const baseline = svgEl("line", { x1: 0, y1: plotHeight, x2: width, y2: plotHeight });
+  baseline.addClass("fin-axis");
+  svg.appendChild(baseline);
+  data.forEach((item, index) => {
+    const barHeight = scale(item.value);
+    const x = index * slot + (slot - barWidth) / 2;
+    const bar = svgEl("rect", {
+      x: x.toFixed(2),
+      y: (plotHeight - barHeight).toFixed(2),
+      width: barWidth,
+      height: Math.max(barHeight, item.value > 0 ? 1 : 0).toFixed(2),
+      rx: 2
+    });
+    bar.addClass("fin-bar");
+    if (options.highlightLast && index === data.length - 1) bar.addClass("is-current");
+    svg.appendChild(bar).appendChild(svgEl("title")).textContent = `${item.sublabel ?? item.label}: ${formatAmount(item.value)} ${options.currency}`;
+  });
+  for (const index of /* @__PURE__ */ new Set([0, Math.floor(data.length / 2), data.length - 1])) {
+    const label = svgEl("text", {
+      x: (index * slot + slot / 2).toFixed(2),
+      y: height - 6,
+      "text-anchor": "middle"
+    });
+    label.addClass("fin-axis-label");
+    label.textContent = data[index].label;
+    svg.appendChild(label);
+  }
+  container.appendChild(svg);
+  container.createEl("p", {
+    cls: "fin-chart-caption",
+    text: `Peak ${formatAmount(max)} ${options.currency} \xB7 ${data.length} buckets`
+  });
+}
+
+// src/ui/charts/hbars.ts
+function renderHBars(container, data, options) {
+  if (!data.length) {
+    container.createEl("p", { cls: "fin-panel-empty", text: "Nothing to show for this period." });
+    return;
+  }
+  const max = Math.max(...data.map((item) => item.value)) || 1;
+  const list = container.createDiv({ cls: "fin-hbars" });
+  for (const item of data) {
+    const row = list.createDiv({ cls: "fin-hbar-row" });
+    const head = row.createDiv({ cls: "fin-hbar-head" });
+    head.createSpan({ cls: "fin-hbar-label", text: item.label });
+    head.createSpan({
+      cls: "fin-hbar-value fin-amount",
+      text: `${formatAmount(item.value)}${options.currency ? ` ${options.currency}` : ""}`
+    });
+    const track = row.createDiv({ cls: "fin-hbar-track" });
+    const fill = track.createDiv({ cls: "fin-hbar-fill" });
+    const ratio = item.ratio ?? item.value / max;
+    fill.style.width = `${Math.min(Math.max(ratio, 0), 1) * 100}%`;
+    if (item.color) fill.style.background = item.color;
+    if (item.ratio !== void 0 && item.ratio > 1) {
+      track.addClass("is-over");
+    }
+    if (item.caption) row.createDiv({ cls: "fin-hbar-caption", text: item.caption });
+    if (options.onSelect) {
+      row.addClass("is-clickable");
+      row.addEventListener("click", () => options.onSelect(item.label));
+    }
+  }
+}
+
+// src/ui/tabs/stats-tab.ts
+var SHORT_MONTHS2 = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+var StatsTab = class {
+  constructor(plugin) {
+    this.plugin = plugin;
+  }
+  render(container) {
+    const today = cairoToday();
+    const filter = this.plugin.store.get();
+    const records = applyFilter(this.plugin.index.transactions(), filter, today);
+    if (!records.length) {
+      renderEmptyState(
+        container,
+        "bar-chart-3",
+        "Nothing to chart",
+        "No transactions match these filters. Try a different period."
+      );
+      return;
+    }
+    const grid = container.createDiv({ cls: "fin-panel-grid" });
+    const currency = primaryCurrency(records);
+    const label = periodLabel(filter.period);
+    this.renderFlowPanel(grid, records, label);
+    this.renderCategoryPanel(grid, records, currency, label);
+    this.renderTrendPanel(grid, records, currency, today);
+    this.renderBudgetPanel(grid, records, label);
+    this.renderMerchantPanel(grid, records, currency);
+    this.renderBalancePanel(grid);
+  }
+  /** 1. Income vs expenses vs net. */
+  renderFlowPanel(grid, records, label) {
+    const body = renderPanel(grid, "Money in and out", label);
+    const totals = totalsByCurrency(records);
+    for (const [currency, item] of [...totals].sort()) {
+      if (totals.size > 1) body.createDiv({ cls: "fin-panel-currency", text: currency });
+      renderHBars(body, [
+        { label: "Income", value: item.income, color: "var(--fin-money-in)" },
+        { label: "Expenses", value: item.expenses, color: "var(--fin-money-out)" },
+        ...item.transfers ? [{ label: "Transfers", value: item.transfers, color: "var(--text-muted)" }] : []
+      ], { currency });
+      const net = body.createDiv({ cls: "fin-panel-net" });
+      net.createSpan({ text: "Net" });
+      net.createSpan({
+        cls: `fin-amount ${item.net < 0 ? "fin-out" : "fin-in"}`,
+        text: `${item.net < 0 ? "\u2212" : "+"}${formatAmount(item.net)} ${currency}`
+      });
+    }
+  }
+  /** 2. Spending by category, clickable through to the list. */
+  renderCategoryPanel(grid, records, currency, label) {
+    const body = renderPanel(grid, "Where it went", `${label} \xB7 ${currency}`);
+    const categories = new Map(this.plugin.index.categories().map((item) => [item.name, item]));
+    const spend = spendByCategory(records, currency);
+    const total = spend.reduce((sum, item) => sum + item.amount, 0);
+    renderDonut(
+      body,
+      spend.map((item) => ({
+        label: item.category,
+        value: item.amount,
+        color: categoryColor(item.category, categories)
+      })),
+      {
+        total,
+        currency,
+        onSelect: (category) => {
+          this.plugin.store.set({ categories: [category] });
+          this.plugin.showTransactionsTab();
+        }
+      }
+    );
+  }
+  /** 3. Spending over time — by day within a month, by month otherwise. */
+  renderTrendPanel(grid, records, currency, today) {
+    const filter = this.plugin.store.get();
+    const range = resolvePeriod(filter.period, today);
+    const body = renderPanel(grid, "Spending over time", currency);
+    if (filter.period.unit === "month" && range) {
+      const days = spendByDay(records, currency, range.from, range.to);
+      renderBars(
+        body,
+        days.map((day) => ({
+          label: String(Number(day.date.slice(8))),
+          sublabel: day.date,
+          value: day.amount
+        })),
+        { currency }
+      );
+      const spent = days.reduce((sum, day) => sum + day.amount, 0);
+      const elapsed = days.filter((day) => day.date <= today).length || days.length;
+      body.createEl("p", {
+        cls: "fin-chart-caption",
+        text: `Average ${formatAmount(spent / elapsed)} ${currency} per day so far`
+      });
+      return;
+    }
+    const months = records.map((record) => record.month).filter(Boolean);
+    if (!months.length) {
+      body.createEl("p", { cls: "fin-panel-empty", text: "Nothing to show for this period." });
+      return;
+    }
+    const from = months.reduce((min, month) => month < min ? month : min, months[0]);
+    const to = months.reduce((max, month) => month > max ? month : max, months[0]);
+    renderBars(
+      body,
+      spendByMonth(records, currency, from, to).map((item) => ({
+        label: SHORT_MONTHS2[Number(item.month.slice(5, 7)) - 1],
+        sublabel: item.month,
+        value: item.amount
+      })),
+      { currency }
+    );
+  }
+  /** 4. Budget progress. */
+  renderBudgetPanel(grid, records, label) {
+    const body = renderPanel(grid, "Budgets", label);
+    const categories = this.plugin.index.categories();
+    const progress = budgetProgress(categories, records);
+    if (!progress.length) {
+      body.createEl("p", {
+        cls: "fin-panel-empty",
+        text: "No budgets set. Open a category from the Stats tab to set one."
+      });
+      this.renderCategoryEditorButton(body);
+      return;
+    }
+    renderHBars(
+      body,
+      progress.map((item) => ({
+        label: item.category,
+        value: item.spent,
+        ratio: item.ratio,
+        color: item.level === "over" ? "var(--fin-over)" : item.level === "warn" ? "var(--fin-warn)" : void 0,
+        caption: item.remaining >= 0 ? `${formatAmount(item.remaining)} left of ${formatAmount(item.budget)}` : `${formatAmount(-item.remaining)} over ${formatAmount(item.budget)}`
+      })),
+      {
+        currency: progress[0].currency,
+        onSelect: (category) => {
+          this.plugin.store.set({ categories: [category] });
+          this.plugin.showTransactionsTab();
+        }
+      }
+    );
+    this.renderCategoryEditorButton(body);
+  }
+  renderCategoryEditorButton(body) {
+    const button = body.createEl("button", { cls: "fin-more", text: "Edit categories and budgets" });
+    button.addEventListener("click", () => this.plugin.openCategoryEditor());
+  }
+  /** 5. Top merchants. */
+  renderMerchantPanel(grid, records, currency) {
+    const body = renderPanel(grid, "Top merchants", currency);
+    const merchants = spendByMerchant(records, currency, 10);
+    renderHBars(
+      body,
+      merchants.map((item) => ({
+        label: item.merchant,
+        value: item.amount,
+        caption: `${item.count} transaction${item.count === 1 ? "" : "s"}`
+      })),
+      {
+        currency,
+        onSelect: (merchant) => {
+          this.plugin.store.set({ search: merchant });
+          this.plugin.showTransactionsTab();
+        }
+      }
+    );
+  }
+  /** 6. Account balances. Always all-time — a filtered balance is meaningless. */
+  renderBalancePanel(grid) {
+    const body = renderPanel(grid, "Balances", "All transactions");
+    const balances = deriveBalances(this.plugin.index.accounts(), this.plugin.index.transactions());
+    if (!balances.length) {
+      body.createEl("p", { cls: "fin-panel-empty", text: "No accounts set up yet." });
+      return;
+    }
+    renderHBars(
+      body,
+      balances.filter((item) => item.balance !== 0).sort((a, b) => b.balance - a.balance).map((item) => ({ label: item.account.name, value: item.balance, caption: item.account.currency })),
+      { currency: "" }
+    );
+    for (const [currency, value] of [...netWorthByCurrency(balances)].sort()) {
+      const net = body.createDiv({ cls: "fin-panel-net" });
+      net.createSpan({ text: `Net worth (${currency})` });
+      net.createSpan({ cls: "fin-amount", text: formatAmount(value) });
+    }
+  }
+};
+
 // src/ui/budget-view.ts
 var BUDGET_VIEW_TYPE = "finance-budget-view";
 var TABS = [
@@ -2148,6 +2638,7 @@ var BudgetView = class extends import_obsidian13.ItemView {
     root.addClass("finance-budget");
     this.transactionsTab = new TransactionsTab(this.plugin);
     this.accountsTab = new AccountsTab(this.plugin);
+    this.statsTab = new StatsTab(this.plugin);
     this.tabBarEl = root.createDiv({ cls: "fin-tabs" });
     this.headerEl = root.createDiv({ cls: "fin-header" });
     this.bodyEl = root.createDiv({ cls: "fin-tab-body" });
@@ -2204,7 +2695,7 @@ var BudgetView = class extends import_obsidian13.ItemView {
     this.accountsTab.render(this.bodyEl);
   }
   renderStats() {
-    this.bodyEl.createEl("p", { text: "Stats" });
+    this.statsTab.render(this.bodyEl);
   }
 };
 
@@ -2614,6 +3105,9 @@ var FinanceAutomationPlugin = class extends import_obsidian16.Plugin {
   }
   openTransactionSheet(record) {
     new TransactionSheet(this.app, this, record).open();
+  }
+  openCategoryEditor() {
+    new import_obsidian16.Notice("Coming soon");
   }
   openAddTransactionModal() {
     new AddTransactionModal(this.app, this).open();

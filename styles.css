@@ -413,3 +413,23 @@
   font-size: 0.85em;
 }
 .fin-unknown p { margin: 4px 0 0; }
+
+/* ---------- stats panels ---------- */
+.fin-panel-grid { display: grid; grid-template-columns: 1fr; gap: 12px; padding: 0 var(--fin-gap) 96px; }
+
+@container (min-width: 720px) {
+  .fin-panel-grid { grid-template-columns: 1fr 1fr; }
+}
+
+.fin-panel { padding: 14px; border-radius: var(--fin-radius); background: var(--fin-raised); }
+.fin-panel-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 12px; }
+.fin-panel-title { margin: 0; font-size: 0.95em; font-weight: 700; }
+.fin-panel-subtitle { font-size: 0.75em; color: var(--text-muted); white-space: nowrap; }
+.fin-panel-currency { font-size: 0.75em; color: var(--text-muted); margin-bottom: 6px; }
+
+.fin-panel-net {
+  display: flex; justify-content: space-between; gap: 8px;
+  margin-top: 12px; padding-top: 10px;
+  border-top: 1px solid var(--fin-border);
+  font-size: 0.9em; font-weight: 600;
+}

@@ -179,6 +179,11 @@ export default class FinanceAutomationPlugin extends Plugin {
     new TransactionSheet(this.app, this, record).open();
   }
 
+  openCategoryEditor(): void {
+    // Filled in by Plan C, Task 5.
+    new Notice("Coming soon");
+  }
+
   openAddTransactionModal(): void {
     new AddTransactionModal(this.app, this).open();
   }

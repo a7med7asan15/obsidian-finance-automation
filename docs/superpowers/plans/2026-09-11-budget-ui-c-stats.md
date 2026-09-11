@@ -764,7 +764,7 @@ git commit -m "feat: add accounts tab with derived balances"
 
 The six panels, in order: income vs expenses vs net; spending by category; spending over time; budget progress; top merchants; account balances.
 
-- [ ] **Step 1: Write `src/ui/components/panel.ts`**
+- [x] **Step 1: Write `src/ui/components/panel.ts`**
 
 ```ts
 export function renderPanel(
@@ -780,7 +780,7 @@ export function renderPanel(
 }
 ```
 
-- [ ] **Step 2: Write `src/ui/tabs/stats-tab.ts`**
+- [x] **Step 2: Write `src/ui/tabs/stats-tab.ts`**
 
 ```ts
 import { applyFilter } from "../../domain/filter.ts";
@@ -1021,7 +1021,7 @@ export class StatsTab {
 }
 ```
 
-- [ ] **Step 3: Style the panels in `styles.css`**
+- [x] **Step 3: Style the panels in `styles.css`**
 
 ```css
 .fin-panel-grid { display: grid; grid-template-columns: 1fr; gap: 12px; padding: 0 var(--fin-gap) 96px; }
@@ -1044,7 +1044,7 @@ export class StatsTab {
 }
 ```
 
-- [ ] **Step 4: Wire it into the view**
+- [x] **Step 4: Wire it into the view**
 
 Replace `BudgetView.renderStats` with `this.statsTab.render(this.bodyEl)`, constructing `this.statsTab = new StatsTab(this.plugin)` in `onOpen`.
 
@@ -1070,7 +1070,7 @@ Check:
 7. Switch to a light theme: axis lines, labels, and the donut centre text all stay legible.
 8. Filter to a category with no expenses and confirm the panels show the empty message rather than an error.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/ui/components/panel.ts src/ui/tabs/stats-tab.ts src/ui/budget-view.ts src/main.ts styles.css
