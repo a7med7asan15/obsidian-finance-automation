@@ -372,3 +372,44 @@
 .fin-hbar-row.is-clickable { cursor: pointer; }
 
 .fin-panel-empty { color: var(--text-muted); font-size: 0.9em; text-align: center; padding: 16px 0; margin: 0; }
+
+/* ---------- accounts tab ---------- */
+.fin-networth { padding: var(--fin-gap); text-align: center; }
+.fin-networth-label { font-size: 0.75em; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
+.fin-networth-row { display: flex; align-items: baseline; justify-content: center; gap: 6px; }
+.fin-networth-value { font-size: 1.9em; font-weight: 700; }
+.fin-networth-currency { color: var(--text-muted); font-size: 0.9em; }
+
+.fin-account-list { display: flex; flex-direction: column; gap: 10px; padding: 0 var(--fin-gap) var(--fin-gap); }
+
+.fin-account-card {
+  padding: 14px; border-radius: var(--fin-radius);
+  background: var(--fin-raised); cursor: pointer;
+  transition: transform 150ms ease;
+}
+.fin-account-card:hover { transform: translateY(-1px); }
+
+.fin-account-head { display: flex; align-items: center; gap: 12px; }
+.fin-account-icon {
+  flex: 0 0 auto; display: grid; place-items: center;
+  width: 38px; height: 38px; border-radius: 10px;
+  background: var(--background-primary); color: var(--text-muted);
+}
+.fin-account-names { flex: 1 1 auto; min-width: 0; }
+.fin-account-name { font-weight: 600; }
+.fin-account-type { font-size: 0.75em; color: var(--text-muted); text-transform: capitalize; }
+.fin-account-amount { flex: 0 0 auto; text-align: right; }
+.fin-account-balance { font-size: 1.1em; font-weight: 700; }
+.fin-account-currency { font-size: 0.7em; color: var(--text-muted); }
+
+.fin-account-flow { display: flex; gap: 12px; margin-top: 10px; font-size: 0.8em; }
+.fin-account-count { color: var(--text-muted); margin-left: auto; }
+.fin-account-drift { margin-top: 6px; font-size: 0.75em; color: var(--fin-warn); }
+
+.fin-unknown {
+  margin: 0 var(--fin-gap) var(--fin-gap); padding: 12px;
+  border-radius: var(--fin-radius);
+  background: color-mix(in srgb, var(--fin-warn) 10%, transparent);
+  font-size: 0.85em;
+}
+.fin-unknown p { margin: 4px 0 0; }

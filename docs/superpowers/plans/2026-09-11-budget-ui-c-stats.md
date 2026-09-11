@@ -504,7 +504,7 @@ git commit -m "feat: add donut, bar and ranked-bar charts"
 - Consumes: `deriveBalances`, `netWorthByCurrency`, `unknownAccountNames`, `applyFilter`, `formatAmount`.
 - Produces: `class AccountsTab { constructor(plugin); render(container: HTMLElement): void }`
 
-- [ ] **Step 1: Add the opening-balance fields to the account template**
+- [x] **Step 1: Add the opening-balance fields to the account template**
 
 Edit `Budget/Templates/Account.md` in the vault, adding two fields and a comment:
 
@@ -546,7 +546,7 @@ Also create the two real account notes at `Budget/Accounts/CIB.md` and `Budget/A
 }
 ```
 
-- [ ] **Step 2: Write `src/ui/tabs/accounts-tab.ts`**
+- [x] **Step 2: Write `src/ui/tabs/accounts-tab.ts`**
 
 ```ts
 import { setIcon } from "obsidian";
@@ -659,7 +659,7 @@ export class AccountsTab {
 }
 ```
 
-- [ ] **Step 3: Add `showTransactionsTab` to the plugin and view**
+- [x] **Step 3: Add `showTransactionsTab` to the plugin and view**
 
 In `BudgetView`, expose:
 
@@ -684,7 +684,7 @@ showTransactionsTab(): void {
 
 Replace `BudgetView.renderAccounts` with `this.accountsTab.render(this.bodyEl)`.
 
-- [ ] **Step 4: Style it in `styles.css`**
+- [x] **Step 4: Style it in `styles.css`**
 
 ```css
 .fin-networth { padding: var(--fin-gap); text-align: center; }
@@ -741,7 +741,7 @@ Check:
 6. Tapping an account filters the Transactions tab to it and switches tabs.
 7. A transaction with `from_account: "Card ••••9999"` shows up under "accounts that are not set up".
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/ui/tabs/accounts-tab.ts src/ui/budget-view.ts src/main.ts styles.css

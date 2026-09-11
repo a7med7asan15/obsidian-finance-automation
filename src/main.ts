@@ -168,6 +168,13 @@ export default class FinanceAutomationPlugin extends Plugin {
     }
   }
 
+  showTransactionsTab(): void {
+    for (const leaf of this.app.workspace.getLeavesOfType(BUDGET_VIEW_TYPE)) {
+      const view = leaf.view;
+      if (view instanceof BudgetView) view.showTab("transactions");
+    }
+  }
+
   openTransactionSheet(record: TransactionRecord): void {
     new TransactionSheet(this.app, this, record).open();
   }
