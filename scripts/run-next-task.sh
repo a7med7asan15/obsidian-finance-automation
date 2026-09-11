@@ -196,6 +196,15 @@ As you finish each step, edit $PLAN_REL to change that step's \`- [ ]\` to
 a green test run, a successful build, the commit made. If a step's verification
 fails and you cannot resolve it, stop, leave the box unchecked, and explain what
 blocked you.
+
+When the task is done, commit every change in the working tree (\`git add -A\`,
+including the ticked-off plan file) and push to the current branch's remote.
+Prefix the commit subject with the agent name so the run is traceable:
+
+  [$AGENT] <what this task changed>
+
+If a step already made its own commit, still run a final commit for whatever
+remains and push once at the end.
 EOF
 }
 
@@ -221,6 +230,14 @@ if [ "$DRY_RUN" -eq 1 ]; then
 fi
 
 command -v "$AGENT" >/dev/null 2>&1 || die "$AGENT is not on PATH"
+
+# Keep the machine awake for the whole session. caffeinate runs in parallel and
+# `-w $$` ties its lifetime to this shell's PID — which the exec below keeps, so
+# it goes away on its own when the agent exits, however the agent exits.
+if command -v caffeinate >/dev/null 2>&1; then
+  caffeinate -dimsu -w $$ &
+  printf '  caffeinate holding the display and system awake (pid %s)\n' "$!"
+fi
 
 printf '  launching %s (interactive)…\n\n' "$AGENT"
 cd "$REPO_ROOT"

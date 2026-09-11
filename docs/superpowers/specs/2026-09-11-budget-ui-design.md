@@ -37,9 +37,14 @@ Decisions come from `docs/budget-ui-questions.md`. Question numbers are cited as
 
 ## 2. Constraints from the existing system
 
-- **Capture is unchanged.** iPhone Shortcuts post to `obsidian://finance-sms` and
-  `obsidian://finance-transaction`. Those handlers, the SMS parser, the category
-  keyword rules, and the `YYYY/Mon/DDTHH-mm-ss.md` path scheme all survive as-is.
+- **Capture keeps both links, with a sharper split** (`docs/iphone-shortcuts.md`). The
+  SMS automation posts the message text to `obsidian://finance-sms` and *nothing else* —
+  no timestamp, no encoding — and the plugin derives every field from the message,
+  resolving the account from the account/card number in it. The manual Shortcut, run by
+  hand for cash and anything without an SMS, posts separated fields to
+  `obsidian://finance-transaction`. Both handlers, the SMS parser, the category keyword
+  rules, and the `YYYY/Mon/DDTHH-mm-ss.md` path scheme survive as-is; Plan A Task 13 adds
+  only the unencoded-message reassembly and the message-first timestamp fallback.
 - **One note per transaction.** Frontmatter is the database.
 - **Mobile is the primary client.** The plugin is installed on iPhone through BRAT,
   so the build must emit a single `main.js` and must not be desktop-only.

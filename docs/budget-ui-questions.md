@@ -17,8 +17,11 @@ implementation plan from this file without re-reading the whole conversation.
 
 ## What I already know (don't re-answer these)
 
-- Capture happens on iPhone via Shortcuts → `obsidian://finance-sms` (raw SMS) and
-  `obsidian://finance-transaction` (structured fields). This stays.
+- Capture happens on iPhone two ways, and both stay. An automation sends the bank
+  message — and only the message — to `obsidian://finance-sms`, and the plugin derives
+  every field from that text, including the account, from the account/card number in it.
+  A manual Shortcut that you tap sends separated fields to
+  `obsidian://finance-transaction` for cash and anything with no SMS.
 - One Markdown file per transaction under `Budget/Transactions/YYYY/Mon/DDTHH-mm-ss.md`.
   This stays.
 - Accounts are notes in `Budget/Accounts/`, categories are notes in

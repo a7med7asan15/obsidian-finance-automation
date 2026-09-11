@@ -71,7 +71,7 @@ Nothing works until the build does. This task produces a `main.js` built from a 
 - Consumes: nothing.
 - Produces: `npm run build` (one-shot bundle), `npm run dev` (watch + rebuild), `npm test`.
 
-- [ ] **Step 1: Add dev dependencies**
+- [x] **Step 1: Add dev dependencies**
 
 ```bash
 npm install --save-dev typescript@^5.6.0 esbuild@^0.24.0 @types/node@^22.0.0 obsidian@latest builtin-modules@^4.0.0
@@ -79,7 +79,7 @@ npm install --save-dev typescript@^5.6.0 esbuild@^0.24.0 @types/node@^22.0.0 obs
 
 Expected: `package.json` gains a `devDependencies` block. `dependencies` must stay absent.
 
-- [ ] **Step 2: Write `tsconfig.json`**
+- [x] **Step 2: Write `tsconfig.json`**
 
 ```json
 {
@@ -103,7 +103,7 @@ Expected: `package.json` gains a `devDependencies` block. `dependencies` must st
 }
 ```
 
-- [ ] **Step 3: Write `esbuild.config.mjs`**
+- [x] **Step 3: Write `esbuild.config.mjs`**
 
 The `outfile` is the repo-root `main.js`. `copyToVault` also writes the three install files into `.obsidian/plugins/finance-automation/` so a desktop rebuild is live immediately without a manual copy.
 
@@ -157,7 +157,7 @@ if (watch) {
 
 `sourcemap: false` and `minify: false` are deliberate: the bundle ships to a phone, and a readable stack trace in the Obsidian console is worth more than the bytes.
 
-- [ ] **Step 4: Set the scripts in `package.json`**
+- [x] **Step 4: Set the scripts in `package.json`**
 
 ```json
 {
@@ -172,7 +172,7 @@ if (watch) {
 
 `build` typechecks first so a type error fails the build; `dev` skips it for speed.
 
-- [ ] **Step 5: Add `node_modules` to `.gitignore`**
+- [x] **Step 5: Add `node_modules` to `.gitignore`**
 
 ```
 .DS_Store
@@ -181,7 +181,7 @@ node_modules/
 
 `main.js` is deliberately **not** ignored — BRAT installs it straight from the repo.
 
-- [ ] **Step 6: Write a placeholder `src/main.ts`**
+- [x] **Step 6: Write a placeholder `src/main.ts`**
 
 ```ts
 import { Plugin } from "obsidian";
@@ -193,14 +193,14 @@ export default class FinanceAutomationPlugin extends Plugin {
 }
 ```
 
-- [ ] **Step 7: Build and verify**
+- [x] **Step 7: Build and verify**
 
 Run: `npm run build`
 Expected: exits 0; `main.js` at the repo root is now a small bundle containing `Finance Automation loaded`; the same file appears in `.obsidian/plugins/finance-automation/`.
 
 Verify: `grep -c "Finance Automation loaded" main.js` → `1`
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add tsconfig.json esbuild.config.mjs package.json package-lock.json .gitignore src/main.ts main.js
@@ -2550,6 +2550,7 @@ Moves the existing parsing logic out of `main.js` into pure, typed, tested modul
   - `interface CategoryRules { rules: Array<{ category: string; keywords: string[] }> }`
   - `interface ParsedSms { amount: number | null; currency: string; from_account: string; to_account: string; category: string; merchant: string; transaction_type: TransactionType; status: "parsed" | "needs_review"; parser_confidence: number; transaction_id: string }`
   - `parseSms(sms: string, timestamp: string, config: { default_currency?: string }, patterns: SmsPatterns, accounts: AccountConfig, categories: CategoryRules): ParsedSms`
+  - `extractTimestamp(sms: string, patterns: SmsPatterns): string | null` — **additive**, the one thing in this task that is not a straight port. `SmsPatterns` gains an optional `date_patterns?: string[]`, read through the same `makeRegex` translation as every other pattern, with named groups `year`, `month`, `day`, and optional `hour`, `minute`, `second`. It returns a Cairo-offset ISO string (`YYYY-MM-DDTHH:mm:ss+03:00`, missing time parts as `00`) or `null` when nothing matches. `parseSms` does not call it and its behaviour is unchanged; the capture path in Task 13 does. A vault with no `date_patterns` key behaves exactly as today.
   - `categorize(text: string, rules: CategoryRules): string`
   - `stableId(text: string): string`
   - `normalizeCurrency(value: string, fallback: string): string`
@@ -2886,7 +2887,7 @@ export function parseSms(
 Run: `node --test tests/parser.test.ts`
 Expected: PASS, 11 tests.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add src/domain/parser/ src/domain/categorize.ts tests/parser.test.ts
@@ -3231,6 +3232,19 @@ Rebuilds `src/main.ts` from the original `main.js`, wired to the new modules. Th
 
 Port `transactionPathParts`, `uniqueTransactionPath`, `transactionMarkdown`, `createRawSmsTransaction`, and `createStructuredTransaction` from the original `main.js` (lines 152–280 of `git show HEAD:main.js`). Keep the path scheme and the markdown body byte-for-byte identical so existing notes and the iPhone Shortcut docs stay accurate.
 
+Both capture links stay, and `docs/iphone-shortcuts.md` now pins down exactly what each one carries:
+
+- `obsidian://finance-sms?message=…` — the **SMS automation**, and it sends *only* the message. No timestamp, no URL encoding, no other parameter. Everything else is read out of the message text.
+- `obsidian://finance-transaction?amount=…&currency=…&account=…&type=…` — the **manual Shortcut**, run by hand, which supplies the fields from prompts and dropdowns.
+
+Two changes to `createRawSmsTransaction` follow from the SMS link losing its encoding and its timestamp:
+
+1. **Reassemble an unencoded message.** Obsidian splits the query string on `&`, so a message containing a literal `&` (or a `#`) arrives truncated, with the rest of the text spread across stray parameter keys. After reading `message`, append every unrecognised parameter back onto it: for each extra key, add `&` + key, and `=` + value when the value is non-empty, in the order received. Recognised keys are `message`/`sms`/`text` and `timestamp`/`date`. This is what lets the automation stay two actions long.
+
+2. **Resolve the timestamp from the message first.** Order: the `timestamp` parameter if the caller sent one, then a date found in the SMS text via `extractTimestamp` from Task 10, then `new Date().toISOString()`. The capture time is only the last resort.
+
+Cover both with cases in `tests/create.test.ts`: a message containing `A&B=C` round-trips whole, and a message carrying its own date produces a note path from that date rather than from now.
+
 Add one new exported function:
 
 ```ts
@@ -3444,7 +3458,8 @@ The old `tests/capture-links.test.js` mocks `require("obsidian")` against the Co
 3. Create a transaction note from `Budget/Templates/Transaction.md`, paste a real bank SMS into the Original SMS block, and save.
 4. Confirm the frontmatter fills in within a couple of seconds, exactly as before.
 5. Open the command palette and confirm "Process pending SMS transactions" and "Apply exclusion rules to all transactions" are both present, and that "Refresh statistics" is gone.
-6. Trigger an `obsidian://finance-transaction?...` link from the iPhone Shortcut doc and confirm the note is created at the same path shape as before.
+6. Trigger an `obsidian://finance-sms?message=...` link — message only, nothing else — and confirm the note is created at the same path shape as before, with `status: pending`, and is then parsed. Try one whose text contains `&` and confirm the whole message survives.
+7. Trigger an `obsidian://finance-transaction?amount=12&currency=EGP&account=Cash&type=debit` link and confirm the note is created `status: parsed`.
 
 - [ ] **Step 7: Commit**
 

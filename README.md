@@ -7,7 +7,8 @@ Finance Automation processes SMS transaction notes and generates finance reports
 - Processes pending transaction notes when Obsidian starts.
 - Processes and refreshes reports after a transaction note is created or changed.
 - Parses configurable English and Arabic SMS patterns.
-- Captures raw SMS text or structured transaction fields from iPhone Shortcuts through `obsidian://` links.
+- Captures a bank SMS from an iPhone automation through an `obsidian://` link — the message alone — and derives every field from it in the vault.
+- Captures a manual transaction from a tap-to-fill Shortcut for cash and anything with no SMS.
 - Generates `Budget/Stats/Summary.md`, `Budget/Stats/Needs Review.md`, and `Budget/Stats/transactions.csv`.
 - Shows a spinning ribbon icon while processing.
 - Uses only Obsidian APIs: no Python, desktop-only APIs, network requests, or telemetry.
@@ -16,19 +17,23 @@ The plugin expects its vault data under `Budget/Transactions/`, `Budget/Accounts
 
 ## iPhone Shortcuts
 
-Version 2.1.0 adds two capture actions:
+Two ways in. An automation for bank messages, which sends the message and nothing else:
 
 ```text
-obsidian://finance-sms?message=[Encoded SMS]&timestamp=[Encoded ISO date]
+obsidian://finance-sms?message=[Message content]
 ```
 
-This sends the original SMS and lets the plugin parse its transaction fields locally.
+And a Shortcut you tap for cash or anything with no SMS, which supplies the fields from
+prompts and dropdowns:
 
 ```text
-obsidian://finance-transaction?amount=120.50&currency=EGP&account=Visa%201234&type=debit
+obsidian://finance-transaction?amount=120.50&currency=EGP&account=Cash&type=debit
 ```
 
-This creates a transaction from fields that have already been collected or parsed. See [iPhone Shortcuts](docs/iphone-shortcuts.md) for parameters, examples, and setup instructions.
+The SMS way needs no date, no encoding, and no other parameter — the plugin reads the
+amount, currency, type, merchant, category, and the account (from the account or card
+number, via `card_endings` in `Budget/Settings/accounts.json`) out of the message text.
+See [iPhone Shortcuts](docs/iphone-shortcuts.md) for the complete steps for both.
 
 ## Install with BRAT
 

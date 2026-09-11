@@ -1718,7 +1718,13 @@ A major bump: `main.js` is now a build artifact, three generated files are gone,
 
 - [ ] **Step 3: Check `docs/iphone-shortcuts.md` is still accurate**
 
-Both protocol handlers and the note format are unchanged by these plans, so the document should still be correct. Read it and confirm — in particular, that the minimum version it names is updated from 2.1.0 to 3.0.0 where it talks about installing.
+The `finance-sms` handler and the note format are unchanged by these plans, so the document should still be correct. Read it and confirm:
+
+- The SMS automation is still two actions and still sends the message only — no sender, no date, no URL encoding.
+- The manual Shortcut section still matches the `finance-transaction` parameters the code accepts.
+- The minimum version it names is updated from 2.1.0 to 3.0.0 where it talks about installing.
+- The account-matching section still points at `Budget/Settings/accounts.json` and its `card_endings`.
+- `Budget/Settings/iPhone Shortcut.md` in the vault matches this document.
 
 - [ ] **Step 4: Run everything one last time**
 
