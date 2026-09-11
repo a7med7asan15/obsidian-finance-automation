@@ -27,10 +27,10 @@ export function protocolValue(params: ProtocolParams, ...names: string[]): strin
 }
 
 /**
- * Obsidian splits the query string on `&`, so an SMS containing a literal `&`
- * arrives truncated with its tail spread across stray parameter keys. Gluing
- * the extras back on in the order received is what lets the iPhone automation
- * stay two actions long and send the message unencoded.
+ * Obsidian splits the query string on `&`, so an SMS that reaches the handler
+ * unencoded with a literal `&` in it arrives truncated, its tail spread across
+ * stray parameter keys. Gluing the extras back on in the order received keeps
+ * such a message whole; the Shortcut should still encode it.
  */
 export function protocolMessage(params: ProtocolParams): string {
   let message = protocolValue(params, "message", "sms", "text");
@@ -40,7 +40,42 @@ export function protocolMessage(params: ProtocolParams): string {
     message += `&${key}`;
     if (value !== null && value !== undefined && String(value) !== "") message += `=${value}`;
   }
-  return message;
+  return decodePercentEscapes(message);
+}
+
+const PERCENT_RUN = /(?:%[0-9A-Fa-f]{2})+/g;
+const HAS_ESCAPE = /%[0-9A-Fa-f]{2}/;
+
+/**
+ * Obsidian normally hands the handler a decoded value, but it gives up and
+ * passes the raw text through when the link was encoded twice, or when a
+ * truncated link leaves a half-written escape it cannot decode. A message that
+ * still carries `%20` in place of every space is one of those, so it is decoded
+ * here rather than stored as the machine spelling of itself.
+ *
+ * The absence of whitespace is what marks it: a decoded bank message has
+ * spaces, and only an encoded one has none. Each run of escapes is decoded on
+ * its own, and a run ending in an incomplete UTF-8 sequence keeps its tail
+ * rather than losing the whole run.
+ */
+export function decodePercentEscapes(text: string, passes = 2): string {
+  let current = text;
+  for (let pass = 0; pass < passes; pass += 1) {
+    if (/\s/.test(current) || !HAS_ESCAPE.test(current)) break;
+    current = current.replace(PERCENT_RUN, decodeRun);
+  }
+  return current;
+}
+
+function decodeRun(run: string): string {
+  for (let end = run.length; end >= 3; end -= 3) {
+    try {
+      return decodeURIComponent(run.slice(0, end)) + run.slice(end);
+    } catch {
+      // The tail is half of a multi-byte character; drop one escape and retry.
+    }
+  }
+  return run;
 }
 
 export function transactionPathParts(timestamp: string): string {

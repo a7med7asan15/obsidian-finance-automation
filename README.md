@@ -20,7 +20,7 @@ The plugin expects its vault data under `Budget/Transactions/`, `Budget/Accounts
 Two ways in. An automation for bank messages, which sends the message and nothing else:
 
 ```text
-obsidian://finance-sms?message=[Message content]
+obsidian://finance-sms?message=⟨the URL-encoded message⟩
 ```
 
 And a Shortcut you tap for cash or anything with no SMS, which supplies the fields from
@@ -30,9 +30,10 @@ prompts and dropdowns:
 obsidian://finance-transaction?amount=120.50&currency=EGP&account=Cash&type=debit
 ```
 
-The SMS way needs no date, no encoding, and no other parameter — the plugin reads the
-amount, currency, type, merchant, category, and the account (from the account or card
-number, via `card_endings` in `Budget/Settings/accounts.json`) out of the message text.
+The SMS way needs no date and no other parameter — URL-encode the message and the
+plugin reads the amount, currency, type, merchant, category, and the account (from the
+account or card number, via `card_endings` in `Budget/Settings/accounts.json`) out of the
+message text.
 See [iPhone Shortcuts](docs/iphone-shortcuts.md) for the complete steps for both.
 
 ## Install with BRAT
@@ -45,6 +46,19 @@ See [iPhone Shortcuts](docs/iphone-shortcuts.md) for the complete steps for both
 6. Restart Obsidian after the first install, especially on mobile.
 
 BRAT installation requires BRAT 1.1.0 or newer because releases are the source of truth.
+
+### Updating with BRAT
+
+BRAT checks for a newer release when Obsidian starts, so on the iPhone the update usually
+arrives on its own. To pull one immediately:
+
+1. Run **BRAT: Check for updates to all beta plugins** from the command palette (or
+   **Plugins: Check for updates** in BRAT's settings for this plugin alone).
+2. BRAT downloads the new `main.js`, `manifest.json`, and `styles.css` and reloads the
+   plugin. Close and reopen Obsidian if the Budget view still shows the old behaviour.
+
+BRAT compares the release tag against the installed `manifest.json` version, so an update
+only appears once a release newer than the installed one is published.
 
 ## Manual installation
 

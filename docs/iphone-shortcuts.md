@@ -14,31 +14,40 @@ handlers are registered.
 
 ## 1. The SMS way
 
-The automation sends **only the message content**. No sender, no date, no encoding, no
-extra actions. Everything else is read out of the message text inside Obsidian.
+The automation sends **only the message content**, URL-encoded. No sender, no date, no
+other field. Everything else is read out of the message text inside Obsidian.
 
 ```text
-obsidian://finance-sms?message=[Message content]
+obsidian://finance-sms?message=⟨the URL-encoded message⟩
 ```
 
-### Build it — two actions
+The angle brackets stand for a Shortcuts variable chip and are never typed. Nor is any
+bracket of any kind: `[` and `]` belong to IPv6 hosts in a URL, and a link carrying them
+is malformed. One in the query is enough to lose the rest of the message.
+
+### Build it — three actions
 
 1. Open **Shortcuts → Automation → +** and choose **Message**.
 2. Tap **Sender** and pick the bank's sender name or number. This is only the trigger
    condition — iOS needs one, and nothing about the sender is sent to Obsidian.
 3. Choose **Run Immediately**, tap **Next**, then **New Blank Automation**.
-4. Add **Text** and type the link, inserting the message variable at the end:
+4. Add **URL Encode** with **Shortcut Input** as its input — or **Content**, if the
+   automation offers that instead.
+5. Add **Text** and type the link, ending it at `message=`. Then insert the **URL Encoded
+   Text** variable so the chip sits directly against the `=`, with nothing — no bracket,
+   no space — between them:
 
    ```text
-   obsidian://finance-sms?message=[Shortcut Input]
+   obsidian://finance-sms?message=⟨URL Encoded Text⟩
    ```
-
-   Tap the variable chip and choose **Content** if the automation offers it; otherwise
-   **Shortcut Input** is already the message text.
-5. Add **Open URLs** with that **Text** as its input.
-6. Tap **Done**.
+6. Add **Open URLs** with that **Text** as its input.
+7. Tap **Done**.
 
 That is the whole automation. Nothing else belongs in it.
+
+The **URL Encode** step is not optional. A raw space ends a link where it sits, so
+`تم خصم 250 جنيه` opens as `obsidian://finance-sms?message=تم` and the note is created
+with one word in it.
 
 ### What Obsidian reads out of the message
 
@@ -77,12 +86,26 @@ account. Anything less becomes `status: needs_review` — never dropped. Add the
 pattern, alias, or card ending, then run **Process pending SMS transactions** from the
 command palette.
 
-### One thing to know about skipping the encoding
+### What arrives, and what the note shows
 
-Because the message goes into the link as-is, a literal `&` or `#` in a bank SMS ends the
-`message` parameter early. The plugin puts the message back together from the stray
-parameters that Obsidian splits off, so the whole text still lands in the note. Keep the
-automation as it is — the handling belongs in the plugin, not in the Shortcut.
+The note shows the message as the bank wrote it. When a link hands the plugin text that
+is still in its encoded spelling — `%D8%AA%D9%85` rather than `تم` — the plugin decodes it
+before writing, so `sms_message` and the **Original SMS** block hold the original either
+way.
+
+Two older hazards are handled too. A literal `&` or `#` in an unencoded message ends the
+`message` parameter early; the plugin glues the stray parameters Obsidian splits off back
+on in the order received. And a link cut off mid-escape leaves text that cannot be
+decoded; the plugin decodes as far as the cut and keeps the remainder as it came, rather
+than losing the whole message.
+
+### The length of a link
+
+A message travels inside the URL, and encoding is expensive: one Arabic letter costs six
+characters. A long bank SMS can run to several hundred characters encoded, and a link that
+is cut short arrives short — nothing downstream can recover text that was never sent. If
+notes are arriving truncated at the same length every time, that ceiling is what you are
+hitting.
 
 ---
 
@@ -93,7 +116,7 @@ when there is no SMS to work from. It asks for the details and sends them alread
 separated, so Obsidian stores them without parsing anything.
 
 ```text
-obsidian://finance-transaction?amount=[Amount]&currency=[Currency]&account=[Account]&type=[Type]&merchant=[Encoded merchant]
+obsidian://finance-transaction?amount=⟨Amount⟩&currency=⟨Currency⟩&account=⟨Account⟩&type=⟨Type⟩&merchant=⟨Encoded merchant⟩
 ```
 
 ### Build it
@@ -111,10 +134,11 @@ obsidian://finance-transaction?amount=[Amount]&currency=[Currency]&account=[Acco
    step 7 if you do not want to be asked.
 7. Add **URL Encode** with that text as its input. This one is needed: a merchant you
    type by hand can contain anything.
-8. Add **Text** and build the link with the chosen values:
+8. Add **Text** and build the link with the chosen values, each angle-bracketed name
+   standing for a variable chip you insert rather than characters you type:
 
    ```text
-   obsidian://finance-transaction?amount=[Amount]&currency=[Currency]&account=[Account]&type=[Type]&merchant=[URL Encoded Text]
+   obsidian://finance-transaction?amount=⟨Amount⟩&currency=⟨Currency⟩&account=⟨Account⟩&type=⟨Type⟩&merchant=⟨URL Encoded Text⟩
    ```
 9. Add **Open URLs** with that **Text**.
 10. Tap **Done**, then long-press the Shortcut → **Add to Home Screen** if you want it one
@@ -151,8 +175,10 @@ safe as long as you write their spaces as `%20`.
 | Nothing happens when the link opens | Plugin not enabled, or Obsidian not restarted since installing it |
 | Note appears but stays `pending` | Processing has not run yet; run **Process pending SMS transactions** |
 | `needs_review` with no account | The card digits are missing from `card_endings`, or the bank's wording is not in `card_ending_patterns` |
-| SMS text cut off mid-way | The message contained a literal `&` or `#` — see above |
+| SMS note holds only the first word | The automation has no **URL Encode** action, so a space ended the link |
+| SMS text cut off at the same length every time | The link is running into a length ceiling — see above |
 | Manual note has a mangled account | A space in a dropdown value was not written as `%20` |
+| Message starts with `[` or is cut off after it | A bracket was typed around a variable chip; the link is malformed |
 
 If the phone holds more than one vault, open the finance vault once: the link is handled
 by the vault Obsidian has open.

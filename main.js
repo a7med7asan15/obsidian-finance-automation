@@ -1099,7 +1099,26 @@ function protocolMessage(params) {
     message += `&${key2}`;
     if (value !== null && value !== void 0 && String(value) !== "") message += `=${value}`;
   }
-  return message;
+  return decodePercentEscapes(message);
+}
+var PERCENT_RUN = /(?:%[0-9A-Fa-f]{2})+/g;
+var HAS_ESCAPE = /%[0-9A-Fa-f]{2}/;
+function decodePercentEscapes(text, passes = 2) {
+  let current = text;
+  for (let pass = 0; pass < passes; pass += 1) {
+    if (/\s/.test(current) || !HAS_ESCAPE.test(current)) break;
+    current = current.replace(PERCENT_RUN, decodeRun);
+  }
+  return current;
+}
+function decodeRun(run) {
+  for (let end = run.length; end >= 3; end -= 3) {
+    try {
+      return decodeURIComponent(run.slice(0, end)) + run.slice(end);
+    } catch {
+    }
+  }
+  return run;
 }
 function transactionPathParts(timestamp) {
   const direct = String(timestamp).match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})/);

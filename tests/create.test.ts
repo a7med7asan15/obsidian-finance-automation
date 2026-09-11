@@ -10,6 +10,7 @@ const {
   createStructuredTransaction,
   createManualTransaction,
   protocolMessage,
+  decodePercentEscapes,
   transactionPathParts,
 } = await import("../src/data/create.ts");
 
@@ -48,6 +49,27 @@ test("a message containing & round-trips whole", () => {
   );
   assert.equal(protocolMessage({ message: "Ref 9", "x#tag": "" }), "Ref 9&x#tag");
   assert.equal(protocolMessage({ message: "Plain text" }), "Plain text");
+});
+
+test("a message that arrives still percent-encoded is decoded", () => {
+  assert.equal(
+    protocolMessage({ message: "%D8%AA%D9%85%20%D8%AE%D8%B5%D9%85%20EGP%20350.00" }),
+    "تم خصم EGP 350.00",
+  );
+  assert.equal(
+    protocolMessage({ message: "%2520%D8%AA%D9%85" }),
+    " تم",
+  );
+});
+
+test("decoding keeps the readable part when an escape is cut in half", () => {
+  // A link truncated mid-escape: the last two bytes are half an Arabic letter.
+  assert.equal(decodePercentEscapes("%D8%AA%D9%85%20%D8"), "تم %D8");
+});
+
+test("decoding leaves an already readable message alone", () => {
+  assert.equal(decodePercentEscapes("Paid 50% at Cafe%20"), "Paid 50% at Cafe%20");
+  assert.equal(decodePercentEscapes("تم خصم 350 جنيه"), "تم خصم 350 جنيه");
 });
 
 test("a captured message keeps its own & through to the note", async () => {
