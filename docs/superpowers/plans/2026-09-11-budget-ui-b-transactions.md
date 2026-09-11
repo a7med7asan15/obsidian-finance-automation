@@ -749,7 +749,7 @@ git commit -m "feat: add Budget view shell with tabs"
 - Consumes: `FilterStore`, `periodLabel`, `cairoToday`, `Menu` from `obsidian`.
 - Produces: `class PeriodPicker { constructor(store: FilterStore); render(container: HTMLElement): void }`
 
-- [ ] **Step 1: Write `src/ui/components/period-picker.ts`**
+- [x] **Step 1: Write `src/ui/components/period-picker.ts`**
 
 ```ts
 import { Menu, setIcon } from "obsidian";
@@ -844,7 +844,7 @@ export class PeriodPicker {
 
 When the unit is `custom`, the filter bar (Task 5) renders two date inputs under the stepper; the picker itself only sets the unit.
 
-- [ ] **Step 2: Style it in `styles.css`**
+- [x] **Step 2: Style it in `styles.css`**
 
 ```css
 .fin-period { padding: var(--fin-gap); display: flex; flex-direction: column; gap: 8px; }
@@ -895,7 +895,7 @@ When the unit is `custom`, the filter bar (Task 5) renders two date inputs under
 
 The quick chips sit in a horizontally scrolling row so a narrow phone never wraps them onto a second line.
 
-- [ ] **Step 3: Wire it into the view**
+- [x] **Step 3: Wire it into the view**
 
 In `budget-view.ts`, add a header region above `bodyEl` and render the picker into it, re-rendering on every filter change:
 
@@ -919,7 +919,7 @@ Check:
 4. Choosing All time hides both arrows.
 5. The quick chips scroll horizontally on a narrow view and highlight the matching one.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/ui/components/period-picker.ts src/ui/budget-view.ts styles.css

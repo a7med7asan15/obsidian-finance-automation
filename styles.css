@@ -95,3 +95,55 @@
 @media (prefers-reduced-motion: reduce) {
   .finance-budget * { transition: none !important; animation: none !important; }
 }
+
+/* ---------- period picker ---------- */
+.fin-period { padding: var(--fin-gap); display: flex; flex-direction: column; gap: 8px; }
+
+.fin-period-stepper {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+}
+
+.fin-period-label {
+  flex: 1; min-height: var(--fin-touch);
+  border: none; background: transparent;
+  color: var(--text-normal); font-size: 1.15em; font-weight: 700;
+  cursor: pointer; border-radius: var(--fin-radius);
+}
+
+.fin-period-label:hover { background: var(--fin-raised); }
+
+.fin-icon-button {
+  display: grid; place-items: center;
+  width: var(--fin-touch); height: var(--fin-touch);
+  border: none; border-radius: var(--fin-radius);
+  background: transparent; color: var(--text-muted); cursor: pointer;
+}
+
+.fin-icon-button:hover { background: var(--fin-raised); color: var(--text-normal); }
+.fin-icon-button.is-hidden { visibility: hidden; }
+
+.fin-chip-row {
+  display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none;
+  padding-bottom: 2px;
+}
+.fin-chip-row::-webkit-scrollbar { display: none; }
+
+.fin-chip {
+  flex: 0 0 auto; min-height: 34px; padding: 0 12px;
+  border: 1px solid var(--fin-border); border-radius: 999px;
+  background: transparent; color: var(--text-muted);
+  font-size: 0.85em; white-space: nowrap; cursor: pointer;
+  transition: opacity 150ms ease;
+}
+
+.fin-chip.is-active {
+  background: var(--interactive-accent);
+  border-color: var(--interactive-accent);
+  color: var(--text-on-accent);
+}
+
+/* The header stays pinned while only the list below it scrolls. */
+.fin-header {
+  flex: 0 0 auto;
+  border-bottom: 1px solid var(--fin-border);
+}

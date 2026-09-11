@@ -1,4 +1,6 @@
-import { ItemView, WorkspaceLeaf } from "obsidian";
+import { ItemView } from "obsidian";
+import type { WorkspaceLeaf } from "obsidian";
+import { PeriodPicker } from "./components/period-picker.ts";
 import type FinanceAutomationPlugin from "../main.ts";
 
 export const BUDGET_VIEW_TYPE = "finance-budget-view";
@@ -14,6 +16,7 @@ const TABS: Array<{ id: BudgetTab; label: string }> = [
 export class BudgetView extends ItemView {
   private readonly plugin: FinanceAutomationPlugin;
   private activeTab: BudgetTab = "transactions";
+  private headerEl!: HTMLElement;
   private bodyEl!: HTMLElement;
   private tabBarEl!: HTMLElement;
   private unsubscribe: Array<() => void> = [];
@@ -41,6 +44,7 @@ export class BudgetView extends ItemView {
     root.addClass("finance-budget");
 
     this.tabBarEl = root.createDiv({ cls: "fin-tabs" });
+    this.headerEl = root.createDiv({ cls: "fin-header" });
     this.bodyEl = root.createDiv({ cls: "fin-tab-body" });
 
     this.renderTabBar();
@@ -77,6 +81,9 @@ export class BudgetView extends ItemView {
   }
 
   renderActiveTab(): void {
+    this.headerEl.empty();
+    new PeriodPicker(this.plugin.store).render(this.headerEl);
+
     this.bodyEl.empty();
     if (this.activeTab === "transactions") this.renderTransactions();
     else if (this.activeTab === "accounts") this.renderAccounts();

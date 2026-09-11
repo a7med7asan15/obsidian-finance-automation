@@ -23,7 +23,7 @@ __export(main_exports, {
   default: () => FinanceAutomationPlugin
 });
 module.exports = __toCommonJS(main_exports);
-var import_obsidian7 = require("obsidian");
+var import_obsidian8 = require("obsidian");
 
 // src/constants.ts
 var VAULT_ROOT = "Budget/";
@@ -69,6 +69,21 @@ function readStringList(value) {
 
 // src/domain/dates.ts
 var TIMEZONE = "Africa/Cairo";
+var MONTH_NAMES = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December"
+];
+var SHORT_MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 var CAIRO_FORMAT = new Intl.DateTimeFormat("en-GB", {
   timeZone: TIMEZONE,
   year: "numeric",
@@ -130,6 +145,19 @@ function stepPeriod(period, delta) {
   if (period.unit === "month") return { ...period, anchor: addMonths(period.anchor, delta) };
   if (period.unit === "year") return { ...period, anchor: String(Number(period.anchor) + delta) };
   return period;
+}
+function longDate(date) {
+  const [year, month, day] = date.split("-");
+  return `${Number(day)} ${SHORT_MONTHS[Number(month) - 1]} ${year}`;
+}
+function periodLabel(period) {
+  if (period.unit === "all") return "All time";
+  if (period.unit === "year") return period.anchor;
+  if (period.unit === "custom") {
+    return `${longDate(period.from ?? "")} \u2013 ${longDate(period.to ?? "")}`;
+  }
+  const [year, month] = period.anchor.split("-");
+  return `${MONTH_NAMES[Number(month) - 1]} ${year}`;
 }
 
 // src/data/records.ts
@@ -949,14 +977,91 @@ var FilterStore = class {
 };
 
 // src/ui/budget-view.ts
+var import_obsidian7 = require("obsidian");
+
+// src/ui/components/period-picker.ts
 var import_obsidian6 = require("obsidian");
+var QUICK_CHIPS = [
+  { label: "This month", build: (today) => ({ unit: "month", anchor: today.slice(0, 7), from: null, to: null }) },
+  {
+    label: "Last month",
+    build: (today) => {
+      const [year, month] = today.slice(0, 7).split("-").map(Number);
+      const previous = month === 1 ? `${year - 1}-12` : `${year}-${String(month - 1).padStart(2, "0")}`;
+      return { unit: "month", anchor: previous, from: null, to: null };
+    }
+  },
+  { label: "This year", build: (today) => ({ unit: "year", anchor: today.slice(0, 4), from: null, to: null }) },
+  { label: "All", build: () => ({ unit: "all", anchor: "", from: null, to: null }) }
+];
+var PeriodPicker = class {
+  constructor(store) {
+    this.store = store;
+  }
+  render(container) {
+    const today = cairoToday();
+    const period = this.store.get().period;
+    const wrapper = container.createDiv({ cls: "fin-period" });
+    const stepper = wrapper.createDiv({ cls: "fin-period-stepper" });
+    const back = stepper.createEl("button", { cls: "fin-icon-button", attr: { "aria-label": "Previous period" } });
+    (0, import_obsidian6.setIcon)(back, "chevron-left");
+    back.addEventListener("click", () => this.store.step(-1));
+    const label = stepper.createEl("button", { cls: "fin-period-label", text: periodLabel(period) });
+    label.addEventListener("click", (event) => this.openUnitMenu(event, today));
+    const forward = stepper.createEl("button", { cls: "fin-icon-button", attr: { "aria-label": "Next period" } });
+    (0, import_obsidian6.setIcon)(forward, "chevron-right");
+    forward.addEventListener("click", () => this.store.step(1));
+    const steppable = period.unit === "month" || period.unit === "year";
+    back.toggleClass("is-hidden", !steppable);
+    forward.toggleClass("is-hidden", !steppable);
+    const chips = wrapper.createDiv({ cls: "fin-chip-row" });
+    for (const chip of QUICK_CHIPS) {
+      const target = chip.build(today);
+      const button = chips.createEl("button", { cls: "fin-chip", text: chip.label });
+      const isActive = target.unit === period.unit && target.anchor === period.anchor;
+      button.toggleClass("is-active", isActive);
+      button.addEventListener("click", () => this.store.setPeriod(target));
+    }
+  }
+  openUnitMenu(event, today) {
+    const menu = new import_obsidian6.Menu();
+    const current = this.store.get().period;
+    const units = [
+      { unit: "month", label: "Month" },
+      { unit: "year", label: "Year" },
+      { unit: "all", label: "All time" }
+    ];
+    for (const { unit, label } of units) {
+      menu.addItem(
+        (item) => item.setTitle(label).setChecked(current.unit === unit).onClick(() => {
+          const anchor = unit === "month" ? today.slice(0, 7) : unit === "year" ? today.slice(0, 4) : "";
+          this.store.setPeriod({ unit, anchor, from: null, to: null });
+        })
+      );
+    }
+    menu.addSeparator();
+    menu.addItem(
+      (item) => item.setTitle("Custom range\u2026").setChecked(current.unit === "custom").onClick(() => {
+        this.store.setPeriod({
+          unit: "custom",
+          anchor: "",
+          from: current.from ?? `${today.slice(0, 7)}-01`,
+          to: current.to ?? today
+        });
+      })
+    );
+    menu.showAtMouseEvent(event);
+  }
+};
+
+// src/ui/budget-view.ts
 var BUDGET_VIEW_TYPE = "finance-budget-view";
 var TABS = [
   { id: "transactions", label: "Transactions" },
   { id: "accounts", label: "Accounts" },
   { id: "stats", label: "Stats" }
 ];
-var BudgetView = class extends import_obsidian6.ItemView {
+var BudgetView = class extends import_obsidian7.ItemView {
   constructor(leaf, plugin) {
     super(leaf);
     this.activeTab = "transactions";
@@ -977,6 +1082,7 @@ var BudgetView = class extends import_obsidian6.ItemView {
     root.empty();
     root.addClass("finance-budget");
     this.tabBarEl = root.createDiv({ cls: "fin-tabs" });
+    this.headerEl = root.createDiv({ cls: "fin-header" });
     this.bodyEl = root.createDiv({ cls: "fin-tab-body" });
     this.renderTabBar();
     this.renderActiveTab();
@@ -1005,6 +1111,8 @@ var BudgetView = class extends import_obsidian6.ItemView {
     }
   }
   renderActiveTab() {
+    this.headerEl.empty();
+    new PeriodPicker(this.plugin.store).render(this.headerEl);
     this.bodyEl.empty();
     if (this.activeTab === "transactions") this.renderTransactions();
     else if (this.activeTab === "accounts") this.renderAccounts();
@@ -1025,7 +1133,7 @@ var BudgetView = class extends import_obsidian6.ItemView {
 // src/main.ts
 var SMS_PATTERNS_PATH = `${SETTINGS_DIR}/sms_patterns.json`;
 var PARSER_OWNED = /* @__PURE__ */ new Set(["status", "parser_confidence", "transaction_id"]);
-var FinanceAutomationPlugin = class extends import_obsidian7.Plugin {
+var FinanceAutomationPlugin = class extends import_obsidian8.Plugin {
   constructor() {
     super(...arguments);
     this.settings = { ...DEFAULT_SETTINGS };
@@ -1072,7 +1180,7 @@ var FinanceAutomationPlugin = class extends import_obsidian7.Plugin {
       name: "Apply exclusion rules to all transactions",
       callback: async () => {
         const updated = await this.applyRulesToAll();
-        new import_obsidian7.Notice(`Finance: updated ${updated} transaction(s).`);
+        new import_obsidian8.Notice(`Finance: updated ${updated} transaction(s).`);
       }
     });
     this.addSettingTab(new FinanceAutomationSettingTab(this.app, this));
@@ -1122,10 +1230,10 @@ var FinanceAutomationPlugin = class extends import_obsidian7.Plugin {
   async handleCaptureLink(kind, params) {
     try {
       const file = kind === "sms" ? await createRawSmsTransaction(this.app, params, await this.loadPatterns()) : await createStructuredTransaction(this.app, params);
-      new import_obsidian7.Notice(`Finance: captured ${file.path}.`, 5e3);
+      new import_obsidian8.Notice(`Finance: captured ${file.path}.`, 5e3);
     } catch (error) {
       console.error("Finance capture link failed", error);
-      new import_obsidian7.Notice(`Finance capture failed: ${error.message}`, 1e4);
+      new import_obsidian8.Notice(`Finance capture failed: ${error.message}`, 1e4);
     }
   }
   async loadPatterns() {
@@ -1152,20 +1260,20 @@ var FinanceAutomationPlugin = class extends import_obsidian7.Plugin {
   async runFinance(showNotice) {
     if (this.running) {
       this.queued = true;
-      if (showNotice) new import_obsidian7.Notice("Finance processing is already running; another pass is queued.");
+      if (showNotice) new import_obsidian8.Notice("Finance processing is already running; another pass is queued.");
       return;
     }
     this.running = true;
     this.setStatus("running\u2026");
-    if (showNotice) new import_obsidian7.Notice("Finance: processing\u2026");
+    if (showNotice) new import_obsidian8.Notice("Finance: processing\u2026");
     try {
       const updated = await this.processPending();
       this.setStatus("ready");
-      if (showNotice) new import_obsidian7.Notice(`Finance: updated ${updated} transaction(s).`, 6e3);
+      if (showNotice) new import_obsidian8.Notice(`Finance: updated ${updated} transaction(s).`, 6e3);
     } catch (error) {
       this.setStatus("error");
       console.error("Finance automation failed", error);
-      new import_obsidian7.Notice(`Finance automation failed: ${error.message}`, 1e4);
+      new import_obsidian8.Notice(`Finance automation failed: ${error.message}`, 1e4);
     } finally {
       this.running = false;
       if (this.queued) {
