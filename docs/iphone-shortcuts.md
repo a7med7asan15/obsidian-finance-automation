@@ -1,6 +1,6 @@
 # iPhone Shortcuts
 
-Finance Automation 2.1.0 and newer registers two `obsidian://` actions. Both create normal transaction notes under `Transactions/YYYY/Mon/` and trigger the existing report refresh.
+Finance Automation 2.1.0 and newer registers two `obsidian://` actions. Both create normal transaction notes under `Budget/Transactions/YYYY/Mon/` and trigger the existing report refresh.
 
 Enable Finance Automation and restart Obsidian once before opening either kind of link.
 

@@ -1,5 +1,7 @@
 const { Plugin, PluginSettingTab, Setting, Notice, TFile, TFolder, parseYaml, normalizePath } = require("obsidian");
 
+const VAULT_ROOT = "Budget/";
+
 const DEFAULT_SETTINGS = {
   runOnStartup: true,
   watchTransactions: true,
@@ -169,7 +171,7 @@ module.exports = class FinanceAutomationPlugin extends Plugin {
   }
 
   uniqueTransactionPath(timestamp) {
-    const base = `Transactions/${this.transactionPathParts(timestamp)}`;
+    const base = `${VAULT_ROOT}Transactions/${this.transactionPathParts(timestamp)}`;
     let candidate = `${base}.md`;
     let suffix = 2;
     while (this.app.vault.getAbstractFileByPath(candidate)) {
@@ -277,7 +279,7 @@ module.exports = class FinanceAutomationPlugin extends Plugin {
   }
 
   isTransactionNote(vaultPath) {
-    return vaultPath.startsWith("Transactions/") && vaultPath.endsWith(".md") && vaultPath !== "Transactions/README.md";
+    return vaultPath.startsWith(`${VAULT_ROOT}Transactions/`) && vaultPath.endsWith(".md") && vaultPath !== `${VAULT_ROOT}Transactions/README.md`;
   }
 
   queueAutomaticRun() {
@@ -435,10 +437,10 @@ module.exports = class FinanceAutomationPlugin extends Plugin {
 
   async processWithJavaScript() {
     const [config, patterns, accounts, categories] = await Promise.all([
-      this.loadVaultJson("Settings/config.json", { default_currency: "EGP" }),
-      this.loadVaultJson("Settings/sms_patterns.json", {}),
-      this.loadVaultJson("Settings/accounts.json", { accounts: [] }),
-      this.loadVaultJson("Settings/Categories/rules.json", { rules: [] }),
+      this.loadVaultJson(`${VAULT_ROOT}Settings/config.json`, { default_currency: "EGP" }),
+      this.loadVaultJson(`${VAULT_ROOT}Settings/sms_patterns.json`, {}),
+      this.loadVaultJson(`${VAULT_ROOT}Settings/accounts.json`, { accounts: [] }),
+      this.loadVaultJson(`${VAULT_ROOT}Settings/Categories/rules.json`, { rules: [] }),
     ]);
     const files = this.app.vault.getMarkdownFiles().filter((file) => this.isTransactionNote(file.path));
     let updated = 0;
@@ -536,9 +538,9 @@ module.exports = class FinanceAutomationPlugin extends Plugin {
   }
 
   async generateStatsWithJavaScript() {
-    const config = await this.loadVaultJson("Settings/config.json", {});
-    const statsDirectory = config.stats_directory || "Stats";
-    const accountDirectory = `${config.accounts_directory || "Accounts"}/`;
+    const config = await this.loadVaultJson(`${VAULT_ROOT}Settings/config.json`, {});
+    const statsDirectory = config.stats_directory || VAULT_ROOT + "Stats";
+    const accountDirectory = `${config.accounts_directory || VAULT_ROOT + "Accounts"}/`;
     const transactionFiles = this.app.vault.getMarkdownFiles().filter((file) => this.isTransactionNote(file.path));
     const records = [];
     const review = [];
@@ -647,7 +649,7 @@ module.exports = class FinanceAutomationPlugin extends Plugin {
     } else lines.push("No categorized expenses yet.");
 
     const budgets = [];
-    for (const file of this.app.vault.getMarkdownFiles().filter((item) => item.path.startsWith("Settings/Categories/"))) {
+    for (const file of this.app.vault.getMarkdownFiles().filter((item) => item.path.startsWith(`${VAULT_ROOT}Settings/Categories/`))) {
       const properties = this.propertiesFrom(await this.app.vault.cachedRead(file), file);
       const budget = this.numberValue(properties.monthly_budget);
       if (properties.type === "category" && budget !== null) {
