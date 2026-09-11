@@ -2143,7 +2143,7 @@ The engine and its precedence rules already exist and are tested (Plan A, Task 9
   - `class RulesEditorModal extends Modal { constructor(app, plugin) }`
   - `class RuleEditModal extends Modal { constructor(app, plugin, rule: ExclusionRule | null, onSave: (rule: ExclusionRule) => Promise<void>) }`
 
-- [ ] **Step 1: Seed the rules file**
+- [x] **Step 1: Seed the rules file**
 
 Create `Budget/Settings/exclusion_rules.json` in the vault with the motivating rule, so there is something real to look at:
 
@@ -2165,7 +2165,7 @@ Create `Budget/Settings/exclusion_rules.json` in the vault with the motivating r
 }
 ```
 
-- [ ] **Step 2: Write `src/ui/components/rules-editor.ts`**
+- [x] **Step 2: Write `src/ui/components/rules-editor.ts`**
 
 Two modals. The list modal shows every rule with a live match count; the edit modal builds conditions from dropdowns.
 
@@ -2471,7 +2471,7 @@ export class RuleEditModal extends Modal {
 }
 ```
 
-- [ ] **Step 3: Add the entry points**
+- [x] **Step 3: Add the entry points**
 
 A command in `src/main.ts`:
 
@@ -2496,7 +2496,7 @@ new Setting(containerEl)
   );
 ```
 
-- [ ] **Step 4: Style it in `styles.css`**
+- [x] **Step 4: Style it in `styles.css`**
 
 ```css
 .fin-condition { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 8px; }
@@ -2533,7 +2533,7 @@ Check:
 7. Corrupt `exclusion_rules.json` deliberately (delete a brace) and reopen: the editor reports the problem and refuses to save over it.
 8. Open a transaction that a rule excluded, toggle exclude off and on in the sheet, save, then re-apply rules — it stays as you set it, because the sheet made it manual.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/ui/components/rules-editor.ts src/main.ts src/settings.ts styles.css

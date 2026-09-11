@@ -303,3 +303,23 @@
 @media (prefers-reduced-motion: reduce) {
   .fin-sheet { animation: none; }
 }
+
+/* ---------- rules editor ---------- */
+.fin-condition { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 8px; }
+.fin-condition-part { flex: 1 1 120px; min-width: 0; min-height: var(--fin-touch); }
+.fin-condition-remove {
+  flex: 0 0 auto; width: var(--fin-touch); height: var(--fin-touch);
+  border: none; border-radius: var(--fin-radius);
+  background: transparent; color: var(--text-muted);
+  font-size: 1.2em; cursor: pointer;
+}
+.fin-condition-remove:hover { color: var(--fin-money-out); }
+
+.fin-rule-preview {
+  margin-top: 12px; padding: 10px 12px;
+  border-radius: var(--fin-radius); background: var(--fin-raised); font-size: 0.85em;
+}
+.fin-rule-preview p { margin: 0 0 4px; }
+.fin-rule-preview-list { margin: 4px 0 0; padding-left: 18px; color: var(--text-muted); }
+.fin-rule-error { padding: 12px; border-radius: var(--fin-radius); background: color-mix(in srgb, var(--fin-money-out) 12%, transparent); }
+.fin-rule-error-text { color: var(--fin-money-out); }

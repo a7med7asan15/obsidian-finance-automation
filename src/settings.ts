@@ -1,5 +1,6 @@
 import { PluginSettingTab, Setting } from "obsidian";
 import type { App } from "obsidian";
+import { RulesEditorModal } from "./ui/components/rules-editor.ts";
 import type FinanceAutomationPlugin from "./main.ts";
 
 export interface FinanceSettings {
@@ -48,6 +49,15 @@ export class FinanceAutomationSettingTab extends PluginSettingTab {
         toggle.setValue(this.plugin.settings.watchTransactions).onChange(async (value) => {
           this.plugin.settings.watchTransactions = value;
           await this.plugin.saveSettings();
+        }),
+      );
+
+    new Setting(containerEl)
+      .setName("Exclusion rules")
+      .setDesc("Rules that automatically exclude matching transactions from calculations.")
+      .addButton((button) =>
+        button.setButtonText("Edit rules").onClick(() => {
+          new RulesEditorModal(this.app, this.plugin).open();
         }),
       );
 

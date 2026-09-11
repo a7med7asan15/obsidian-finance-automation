@@ -18,6 +18,7 @@ import { DEFAULT_SETTINGS, FinanceAutomationSettingTab } from "./settings.ts";
 import { FilterStore } from "./store/filter-store.ts";
 import { BUDGET_VIEW_TYPE, BudgetView } from "./ui/budget-view.ts";
 import { AddTransactionModal } from "./ui/components/add-transaction-modal.ts";
+import { RulesEditorModal } from "./ui/components/rules-editor.ts";
 import { TransactionSheet } from "./ui/components/transaction-sheet.ts";
 import type { TransactionRecord } from "./data/types.ts";
 import type { FinanceSettings } from "./settings.ts";
@@ -85,6 +86,12 @@ export default class FinanceAutomationPlugin extends Plugin {
       id: "add-transaction",
       name: "Add transaction",
       callback: () => this.openAddTransactionModal(),
+    });
+
+    this.addCommand({
+      id: "edit-exclusion-rules",
+      name: "Edit exclusion rules",
+      callback: () => new RulesEditorModal(this.app, this).open(),
     });
 
     this.addCommand({
