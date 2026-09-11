@@ -1953,7 +1953,7 @@ git commit -m "feat: add transaction detail sheet with editing"
 - Consumes: `createManualTransaction` from `src/data/create.ts` (Plan A, Task 13).
 - Produces: `class AddTransactionModal extends Modal { constructor(app, plugin) }`
 
-- [ ] **Step 1: Write `src/ui/components/add-transaction-modal.ts`**
+- [x] **Step 1: Write `src/ui/components/add-transaction-modal.ts`**
 
 ```ts
 import { App, Modal, Notice, Setting } from "obsidian";
@@ -2089,7 +2089,7 @@ export class AddTransactionModal extends Modal {
 }
 ```
 
-- [ ] **Step 2: Wire it up in `src/main.ts`**
+- [x] **Step 2: Wire it up in `src/main.ts`**
 
 ```ts
 openAddTransactionModal(): void {
@@ -2119,7 +2119,7 @@ Check:
 5. Saving with an empty amount shows a notice and does not create a note.
 6. The note's body contains the text typed into Note, under `## Notes`.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add src/ui/components/add-transaction-modal.ts src/main.ts

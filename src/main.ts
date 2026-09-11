@@ -17,6 +17,7 @@ import type { AccountConfig, CategoryRules, SmsPatterns } from "./domain/parser/
 import { DEFAULT_SETTINGS, FinanceAutomationSettingTab } from "./settings.ts";
 import { FilterStore } from "./store/filter-store.ts";
 import { BUDGET_VIEW_TYPE, BudgetView } from "./ui/budget-view.ts";
+import { AddTransactionModal } from "./ui/components/add-transaction-modal.ts";
 import { TransactionSheet } from "./ui/components/transaction-sheet.ts";
 import type { TransactionRecord } from "./data/types.ts";
 import type { FinanceSettings } from "./settings.ts";
@@ -78,6 +79,12 @@ export default class FinanceAutomationPlugin extends Plugin {
       id: "process-transactions",
       name: "Process pending SMS transactions",
       callback: () => void this.runFinance(true),
+    });
+
+    this.addCommand({
+      id: "add-transaction",
+      name: "Add transaction",
+      callback: () => this.openAddTransactionModal(),
     });
 
     this.addCommand({
@@ -159,8 +166,7 @@ export default class FinanceAutomationPlugin extends Plugin {
   }
 
   openAddTransactionModal(): void {
-    // Filled in by Task 8.
-    new Notice("Coming soon");
+    new AddTransactionModal(this.app, this).open();
   }
 
   async persistFilter(): Promise<void> {
