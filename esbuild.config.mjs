@@ -34,7 +34,8 @@ const context = await esbuild.context({
   treeShaking: true,
   minify: false,
   external: ["obsidian", "electron", ...builtins],
-  plugins: [copyToVault],
+  // CI builds the release bundle only; there is no vault to copy into.
+  plugins: process.env.CI ? [] : [copyToVault],
 });
 
 if (watch) {
