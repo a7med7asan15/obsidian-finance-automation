@@ -1696,7 +1696,7 @@ git commit -m "feat: add day-grouped transaction list with summary and quick act
 - Consumes: `Modal`, `Setting`, `Notice`; `updateTransaction`, `setExcluded`.
 - Produces: `class TransactionSheet extends Modal { constructor(app, plugin, record: TransactionRecord) }`
 
-- [ ] **Step 1: Write `src/ui/components/transaction-sheet.ts`**
+- [x] **Step 1: Write `src/ui/components/transaction-sheet.ts`**
 
 ```ts
 import { App, Modal, Notice, Setting } from "obsidian";
@@ -1885,7 +1885,7 @@ export class TransactionSheet extends Modal {
 
 The comment on `exclude_source` is the important behaviour: touching the toggle by hand converts a rule exclusion into a manual one, which `resolveExclusion` then leaves alone forever.
 
-- [ ] **Step 2: Wire it up in `src/main.ts`**
+- [x] **Step 2: Wire it up in `src/main.ts`**
 
 ```ts
 openTransactionSheet(record: TransactionRecord): void {
@@ -1893,7 +1893,7 @@ openTransactionSheet(record: TransactionRecord): void {
 }
 ```
 
-- [ ] **Step 3: Style it in `styles.css`**
+- [x] **Step 3: Style it in `styles.css`**
 
 ```css
 .fin-sheet .setting-item { padding: 8px 0; border: none; }
@@ -1934,7 +1934,7 @@ Check:
 7. On iPhone the sheet rises from the bottom and is scrollable.
 8. Open the underlying note and confirm the body below the frontmatter is untouched.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/ui/components/transaction-sheet.ts src/main.ts styles.css

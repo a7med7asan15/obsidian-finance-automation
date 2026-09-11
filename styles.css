@@ -279,3 +279,27 @@
   .fin-row { min-height: 52px; }
   .fin-summary-row { padding: 16px; }
 }
+
+/* ---------- transaction sheet ---------- */
+.fin-sheet .setting-item { padding: 8px 0; border: none; }
+.fin-sheet .is-hidden { display: none; }
+.fin-sheet-note { font-size: 0.85em; color: var(--text-muted); margin: 4px 0 0; }
+.fin-sheet-sms pre { white-space: pre-wrap; word-break: break-word; font-size: 0.85em; }
+.fin-sheet-meta { display: flex; gap: 12px; font-size: 0.8em; color: var(--text-muted); margin-top: 8px; }
+.fin-sheet-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
+.fin-sheet-actions button { min-height: var(--fin-touch); padding: 0 16px; }
+
+/* On a phone, present it as a bottom sheet rather than a centred dialog. */
+@media (max-width: 640px) {
+  .fin-sheet {
+    position: fixed; inset: auto 0 0 0;
+    max-height: 88vh; width: 100%;
+    border-radius: 16px 16px 0 0;
+    animation: fin-sheet-up 150ms ease-out;
+  }
+  @keyframes fin-sheet-up { from { transform: translateY(100%); } to { transform: translateY(0); } }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fin-sheet { animation: none; }
+}

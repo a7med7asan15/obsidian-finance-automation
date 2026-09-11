@@ -17,6 +17,7 @@ import type { AccountConfig, CategoryRules, SmsPatterns } from "./domain/parser/
 import { DEFAULT_SETTINGS, FinanceAutomationSettingTab } from "./settings.ts";
 import { FilterStore } from "./store/filter-store.ts";
 import { BUDGET_VIEW_TYPE, BudgetView } from "./ui/budget-view.ts";
+import { TransactionSheet } from "./ui/components/transaction-sheet.ts";
 import type { TransactionRecord } from "./data/types.ts";
 import type { FinanceSettings } from "./settings.ts";
 
@@ -154,8 +155,7 @@ export default class FinanceAutomationPlugin extends Plugin {
   }
 
   openTransactionSheet(record: TransactionRecord): void {
-    // Filled in by Task 7.
-    void this.app.workspace.openLinkText(record.path, "", false);
+    new TransactionSheet(this.app, this, record).open();
   }
 
   openAddTransactionModal(): void {

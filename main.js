@@ -23,7 +23,7 @@ __export(main_exports, {
   default: () => FinanceAutomationPlugin
 });
 module.exports = __toCommonJS(main_exports);
-var import_obsidian12 = require("obsidian");
+var import_obsidian13 = require("obsidian");
 
 // src/constants.ts
 var VAULT_ROOT = "Budget/";
@@ -1366,6 +1366,9 @@ var MONTHS2 = [
 function formatAmount(amount) {
   return AMOUNT_FORMAT.format(Math.abs(amount));
 }
+function formatMoney(amount, currency) {
+  return currency ? `${formatAmount(amount)} ${currency}` : formatAmount(amount);
+}
 function directionOf(record) {
   if (record.type === "credit") return "in";
   if (record.type === "debit" || record.type === "fee") return "out";
@@ -1746,10 +1749,168 @@ var BudgetView = class extends import_obsidian11.ItemView {
   }
 };
 
+// src/ui/components/transaction-sheet.ts
+var import_obsidian12 = require("obsidian");
+var TYPE_CHOICES = {
+  debit: "Spending",
+  credit: "Income",
+  transfer: "Transfer",
+  fee: "Fee"
+};
+var TransactionSheet = class extends import_obsidian12.Modal {
+  constructor(app, plugin, record) {
+    super(app);
+    this.plugin = plugin;
+    this.record = record;
+    this.draft = {
+      amount: record.amount === null ? "" : String(record.amount),
+      currency: record.currency,
+      date: record.date ?? "",
+      time: record.time ?? "",
+      fromAccount: record.fromAccount,
+      toAccount: record.toAccount,
+      category: record.category,
+      merchant: record.merchant,
+      type: record.type,
+      excluded: record.excluded,
+      excludeReason: record.excludeReason
+    };
+  }
+  onOpen() {
+    const { contentEl, modalEl } = this;
+    modalEl.addClass("fin-sheet");
+    contentEl.empty();
+    contentEl.createEl("h2", {
+      text: this.record.merchant || this.record.category || "Transaction"
+    });
+    const accounts = this.plugin.index.accounts().map((account) => account.name).sort();
+    const categories = this.plugin.index.categories().map((category) => category.name).sort();
+    new import_obsidian12.Setting(contentEl).setName("Amount").addText(
+      (text) => text.setValue(this.draft.amount).onChange((value) => {
+        this.draft.amount = value;
+      })
+    ).addText(
+      (text) => text.setPlaceholder("EGP").setValue(this.draft.currency).onChange((value) => {
+        this.draft.currency = value;
+      })
+    );
+    new import_obsidian12.Setting(contentEl).setName("Date").addText((text) => {
+      text.inputEl.type = "date";
+      text.setValue(this.draft.date).onChange((value) => {
+        this.draft.date = value;
+      });
+    }).addText((text) => {
+      text.inputEl.type = "time";
+      text.setValue(this.draft.time).onChange((value) => {
+        this.draft.time = value;
+      });
+    });
+    new import_obsidian12.Setting(contentEl).setName("Type").addDropdown((dropdown) => {
+      dropdown.addOption("", "Unknown");
+      for (const [value, label] of Object.entries(TYPE_CHOICES)) dropdown.addOption(value, label);
+      dropdown.setValue(this.draft.type).onChange((value) => {
+        this.draft.type = value;
+      });
+    });
+    new import_obsidian12.Setting(contentEl).setName("Category").addDropdown((dropdown) => {
+      const options = categories.length ? categories : ["Uncategorized"];
+      if (!options.includes(this.draft.category)) options.unshift(this.draft.category);
+      for (const name of options) dropdown.addOption(name, name);
+      dropdown.setValue(this.draft.category).onChange((value) => {
+        this.draft.category = value;
+      });
+    });
+    this.accountSetting(contentEl, "From account", accounts, "fromAccount");
+    this.accountSetting(contentEl, "To account", accounts, "toAccount");
+    new import_obsidian12.Setting(contentEl).setName("Merchant").addText(
+      (text) => text.setValue(this.draft.merchant).onChange((value) => {
+        this.draft.merchant = value;
+      })
+    );
+    new import_obsidian12.Setting(contentEl).setName("Exclude from calculations").setDesc("The transaction stays in the list but counts towards nothing.").addToggle(
+      (toggle) => toggle.setValue(this.draft.excluded).onChange((value) => {
+        this.draft.excluded = value;
+        reasonSetting.settingEl.toggleClass("is-hidden", !value);
+      })
+    );
+    const reasonSetting = new import_obsidian12.Setting(contentEl).setName("Reason").addText(
+      (text) => text.setPlaceholder("Did not happen").setValue(this.draft.excludeReason).onChange((value) => {
+        this.draft.excludeReason = value;
+      })
+    );
+    reasonSetting.settingEl.toggleClass("is-hidden", !this.draft.excluded);
+    if (this.record.excludeSource === "rule") {
+      contentEl.createEl("p", {
+        cls: "fin-sheet-note",
+        text: `Excluded by the rule "${this.record.excludeRuleId}". Changing it here makes the decision manual, and rules will stop touching it.`
+      });
+    }
+    if (this.record.smsMessage) {
+      const details = contentEl.createEl("details", { cls: "fin-sheet-sms" });
+      details.createEl("summary", { text: "Original SMS" });
+      details.createEl("pre", { text: this.record.smsMessage });
+    }
+    const meta = contentEl.createDiv({ cls: "fin-sheet-meta" });
+    meta.createSpan({ text: `Status: ${this.record.status}` });
+    if (this.record.amount !== null) {
+      meta.createSpan({ text: formatMoney(this.record.amount, this.record.currency) });
+    }
+    const actions = contentEl.createDiv({ cls: "fin-sheet-actions" });
+    const open = actions.createEl("button", { text: "Open note" });
+    open.addEventListener("click", () => {
+      this.close();
+      void this.app.workspace.openLinkText(this.record.path, "", false);
+    });
+    const save = actions.createEl("button", { cls: "mod-cta", text: "Save" });
+    save.addEventListener("click", () => void this.save());
+  }
+  accountSetting(container, label, accounts, field) {
+    new import_obsidian12.Setting(container).setName(label).addDropdown((dropdown) => {
+      dropdown.addOption("", "\u2014");
+      const options = [...accounts];
+      const current = this.draft[field];
+      if (current && !options.includes(current)) options.unshift(current);
+      for (const name of options) dropdown.addOption(name, name);
+      dropdown.setValue(current).onChange((value) => {
+        this.draft[field] = value;
+      });
+    });
+  }
+  async save() {
+    const amount = this.draft.amount.trim() === "" ? null : Number(this.draft.amount.replaceAll(",", ""));
+    if (amount !== null && !Number.isFinite(amount)) {
+      new import_obsidian12.Notice("That amount is not a number.");
+      return;
+    }
+    const time = this.draft.time || "00:00";
+    const timestamp = this.draft.date ? `${this.draft.date}T${time}:00` : this.record.timestamp;
+    try {
+      await updateTransaction(this.app, this.record.path, {
+        amount,
+        currency: this.draft.currency.trim().toUpperCase(),
+        timestamp,
+        from_account: this.draft.fromAccount,
+        to_account: this.draft.toAccount,
+        category: this.draft.category,
+        merchant: this.draft.merchant,
+        transaction_type: this.draft.type,
+        excluded: this.draft.excluded ? true : null,
+        exclude_reason: this.draft.excluded ? this.draft.excludeReason || "Excluded by hand" : null,
+        // Editing by hand always makes the decision manual, so no rule will undo it.
+        exclude_source: this.draft.excluded ? "manual" : null,
+        exclude_rule_id: null
+      });
+      this.close();
+    } catch (error) {
+      new import_obsidian12.Notice(`Could not save: ${error.message}`);
+    }
+  }
+};
+
 // src/main.ts
 var SMS_PATTERNS_PATH = `${SETTINGS_DIR}/sms_patterns.json`;
 var PARSER_OWNED = /* @__PURE__ */ new Set(["status", "parser_confidence", "transaction_id"]);
-var FinanceAutomationPlugin = class extends import_obsidian12.Plugin {
+var FinanceAutomationPlugin = class extends import_obsidian13.Plugin {
   constructor() {
     super(...arguments);
     this.settings = { ...DEFAULT_SETTINGS };
@@ -1796,7 +1957,7 @@ var FinanceAutomationPlugin = class extends import_obsidian12.Plugin {
       name: "Apply exclusion rules to all transactions",
       callback: async () => {
         const updated = await this.applyRulesToAll();
-        new import_obsidian12.Notice(`Finance: updated ${updated} transaction(s).`);
+        new import_obsidian13.Notice(`Finance: updated ${updated} transaction(s).`);
       }
     });
     this.addSettingTab(new FinanceAutomationSettingTab(this.app, this));
@@ -1846,10 +2007,10 @@ var FinanceAutomationPlugin = class extends import_obsidian12.Plugin {
     }
   }
   openTransactionSheet(record) {
-    void this.app.workspace.openLinkText(record.path, "", false);
+    new TransactionSheet(this.app, this, record).open();
   }
   openAddTransactionModal() {
-    new import_obsidian12.Notice("Coming soon");
+    new import_obsidian13.Notice("Coming soon");
   }
   async persistFilter() {
     const data = await this.loadData() ?? {};
@@ -1858,10 +2019,10 @@ var FinanceAutomationPlugin = class extends import_obsidian12.Plugin {
   async handleCaptureLink(kind, params) {
     try {
       const file = kind === "sms" ? await createRawSmsTransaction(this.app, params, await this.loadPatterns()) : await createStructuredTransaction(this.app, params);
-      new import_obsidian12.Notice(`Finance: captured ${file.path}.`, 5e3);
+      new import_obsidian13.Notice(`Finance: captured ${file.path}.`, 5e3);
     } catch (error) {
       console.error("Finance capture link failed", error);
-      new import_obsidian12.Notice(`Finance capture failed: ${error.message}`, 1e4);
+      new import_obsidian13.Notice(`Finance capture failed: ${error.message}`, 1e4);
     }
   }
   async loadPatterns() {
@@ -1888,20 +2049,20 @@ var FinanceAutomationPlugin = class extends import_obsidian12.Plugin {
   async runFinance(showNotice) {
     if (this.running) {
       this.queued = true;
-      if (showNotice) new import_obsidian12.Notice("Finance processing is already running; another pass is queued.");
+      if (showNotice) new import_obsidian13.Notice("Finance processing is already running; another pass is queued.");
       return;
     }
     this.running = true;
     this.setStatus("running\u2026");
-    if (showNotice) new import_obsidian12.Notice("Finance: processing\u2026");
+    if (showNotice) new import_obsidian13.Notice("Finance: processing\u2026");
     try {
       const updated = await this.processPending();
       this.setStatus("ready");
-      if (showNotice) new import_obsidian12.Notice(`Finance: updated ${updated} transaction(s).`, 6e3);
+      if (showNotice) new import_obsidian13.Notice(`Finance: updated ${updated} transaction(s).`, 6e3);
     } catch (error) {
       this.setStatus("error");
       console.error("Finance automation failed", error);
-      new import_obsidian12.Notice(`Finance automation failed: ${error.message}`, 1e4);
+      new import_obsidian13.Notice(`Finance automation failed: ${error.message}`, 1e4);
     } finally {
       this.running = false;
       if (this.queued) {
