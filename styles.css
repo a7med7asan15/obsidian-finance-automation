@@ -337,3 +337,38 @@
 @media (max-width: 640px) {
   .fin-sheet { padding-bottom: env(safe-area-inset-bottom); }
 }
+
+/* ---------- charts ---------- */
+.fin-donut { width: 100%; max-width: 220px; margin: 0 auto; display: block; }
+.fin-donut-slice { transition: opacity 150ms ease; }
+.fin-donut-slice.is-clickable { cursor: pointer; }
+.fin-donut-slice.is-clickable:hover { opacity: 0.75; }
+.fin-donut-total { fill: var(--text-normal); font-size: 18px; font-weight: 700; }
+.fin-donut-currency { fill: var(--text-muted); font-size: 11px; }
+
+.fin-bars { width: 100%; display: block; }
+.fin-axis { stroke: var(--fin-border); stroke-width: 1; }
+.fin-axis-label { fill: var(--text-muted); font-size: 10px; }
+.fin-bar { fill: var(--interactive-accent); opacity: 0.75; }
+.fin-bar.is-current { opacity: 1; }
+.fin-chart-caption { font-size: 0.75em; color: var(--text-muted); text-align: center; margin: 4px 0 0; }
+
+.fin-legend { list-style: none; margin: 12px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.fin-legend-row { display: flex; align-items: center; gap: 8px; font-size: 0.85em; }
+.fin-legend-row.is-clickable { cursor: pointer; }
+.fin-legend-row.is-clickable:hover { opacity: 0.75; }
+.fin-legend-swatch { flex: 0 0 auto; width: 10px; height: 10px; border-radius: 3px; }
+.fin-legend-label { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fin-legend-value { flex: 0 0 auto; color: var(--text-muted); }
+
+.fin-hbars { display: flex; flex-direction: column; gap: 12px; }
+.fin-hbar-head { display: flex; justify-content: space-between; gap: 8px; font-size: 0.85em; margin-bottom: 4px; }
+.fin-hbar-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fin-hbar-value { flex: 0 0 auto; font-weight: 600; }
+.fin-hbar-track { height: 8px; border-radius: 4px; background: var(--fin-border); overflow: hidden; }
+.fin-hbar-track.is-over { box-shadow: inset 0 0 0 1px var(--fin-over); }
+.fin-hbar-fill { height: 100%; background: var(--interactive-accent); border-radius: 4px; transition: width 150ms ease; }
+.fin-hbar-caption { font-size: 0.75em; color: var(--text-muted); margin-top: 3px; }
+.fin-hbar-row.is-clickable { cursor: pointer; }
+
+.fin-panel-empty { color: var(--text-muted); font-size: 0.9em; text-align: center; padding: 16px 0; margin: 0; }

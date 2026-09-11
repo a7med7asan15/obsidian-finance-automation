@@ -219,7 +219,7 @@ git commit -m "feat: add SVG chart primitives"
   - `renderBars(container, data: Array<{ label: string; value: number; sublabel?: string }>, options: { currency: string; highlightLast?: boolean }): void`
   - `renderHBars(container, data: Array<{ label: string; value: number; color?: string; caption?: string; ratio?: number }>, options: { currency: string; onSelect?: (label: string) => void }): void`
 
-- [ ] **Step 1: Write `src/ui/charts/donut.ts`**
+- [x] **Step 1: Write `src/ui/charts/donut.ts`**
 
 ```ts
 import { arcPath, createChart, svgEl } from "./svg.ts";
@@ -307,7 +307,7 @@ export function renderDonut(
 }
 ```
 
-- [ ] **Step 2: Write `src/ui/charts/bars.ts`**
+- [x] **Step 2: Write `src/ui/charts/bars.ts`**
 
 ```ts
 import { createChart, linearScale, niceMax, svgEl } from "./svg.ts";
@@ -377,7 +377,7 @@ export function renderBars(
 }
 ```
 
-- [ ] **Step 3: Write `src/ui/charts/hbars.ts`**
+- [x] **Step 3: Write `src/ui/charts/hbars.ts`**
 
 Used by both Top merchants and Budget progress, which is why `color` and `caption` are optional per row.
 
@@ -442,7 +442,7 @@ export function renderHBars(
 }
 ```
 
-- [ ] **Step 4: Style the charts in `styles.css`**
+- [x] **Step 4: Style the charts in `styles.css`**
 
 ```css
 .fin-donut { width: 100%; max-width: 220px; margin: 0 auto; display: block; }
@@ -480,12 +480,12 @@ export function renderHBars(
 .fin-panel-empty { color: var(--text-muted); font-size: 0.9em; text-align: center; padding: 16px 0; margin: 0; }
 ```
 
-- [ ] **Step 5: Typecheck**
+- [x] **Step 5: Typecheck**
 
 Run: `npm run typecheck`
 Expected: exits 0. Nothing renders yet — Task 4 wires the charts in.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/ui/charts/ styles.css
