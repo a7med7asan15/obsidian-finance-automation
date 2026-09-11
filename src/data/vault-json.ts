@@ -1,4 +1,5 @@
-import { App, TFile, TFolder, normalizePath } from "obsidian";
+import { TFile, TFolder, normalizePath } from "obsidian";
+import type { App } from "obsidian";
 import { RULES_PATH } from "../constants.ts";
 import { validateRule, type ExclusionRule } from "../domain/exclusion.ts";
 

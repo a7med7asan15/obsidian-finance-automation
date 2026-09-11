@@ -1,4 +1,5 @@
-import { App, Plugin, TFile } from "obsidian";
+import { TFile } from "obsidian";
+import type { App, Plugin } from "obsidian";
 import { ACCOUNTS_DIR, CATEGORIES_DIR } from "../constants.ts";
 import { buildAccount, buildCategory, buildTransaction, isTransactionPath } from "./records.ts";
 import type { AccountRecord, CategoryRecord, TransactionRecord } from "./types.ts";

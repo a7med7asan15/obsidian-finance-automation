@@ -114,3 +114,21 @@ export function buildCategory(
     monthlyBudget: readNumber(frontmatter.monthly_budget),
   };
 }
+
+const RECORD_KEYS: Record<string, keyof TransactionRecord> = {
+  amount: "amount",
+  currency: "currency",
+  from_account: "fromAccount",
+  to_account: "toAccount",
+  category: "category",
+  merchant: "merchant",
+  transaction_type: "type",
+  status: "status",
+  parser_confidence: "parserConfidence",
+  transaction_id: "transactionId",
+};
+
+/** Maps a frontmatter key to its record field, or null when there is no match. */
+export function toRecordKey(frontmatterKey: string): keyof TransactionRecord | null {
+  return RECORD_KEYS[frontmatterKey] ?? null;
+}

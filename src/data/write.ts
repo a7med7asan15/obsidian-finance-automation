@@ -1,4 +1,5 @@
-import { App, TFile, normalizePath } from "obsidian";
+import { TFile, normalizePath } from "obsidian";
+import type { App } from "obsidian";
 
 /**
  * Every mutation funnels through processFrontMatter, which rewrites only the

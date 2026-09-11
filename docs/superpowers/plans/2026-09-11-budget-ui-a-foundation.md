@@ -3227,7 +3227,7 @@ Rebuilds `src/main.ts` from the original `main.js`, wired to the new modules. Th
   - `plugin.applyRulesToAll(): Promise<number>`
   - `plugin.index: TransactionIndex`
 
-- [ ] **Step 1: Write `src/data/create.ts`**
+- [x] **Step 1: Write `src/data/create.ts`**
 
 Port `transactionPathParts`, `uniqueTransactionPath`, `transactionMarkdown`, `createRawSmsTransaction`, and `createStructuredTransaction` from the original `main.js` (lines 152–280 of `git show HEAD:main.js`). Keep the path scheme and the markdown body byte-for-byte identical so existing notes and the iPhone Shortcut docs stay accurate.
 
@@ -3290,7 +3290,7 @@ export async function createManualTransaction(
 
 `transactionMarkdown` gains a third parameter `note = ""` which is written under the `## Notes` heading. Existing call sites pass nothing and are unaffected.
 
-- [ ] **Step 2: Write `src/settings.ts`**
+- [x] **Step 2: Write `src/settings.ts`**
 
 Port `FinanceAutomationSettingTab` from the original `main.js` verbatim, converted to TypeScript, with its two toggles ("Process when Obsidian starts", "Watch transaction notes"). Add a third:
 
@@ -3322,7 +3322,7 @@ export const DEFAULT_SETTINGS: FinanceSettings = {
 };
 ```
 
-- [ ] **Step 3: Rewrite `src/main.ts`**
+- [x] **Step 3: Rewrite `src/main.ts`**
 
 Port from the original, keeping: the ribbon icon, the `process-transactions` command, both `registerObsidianProtocolHandler` calls, the running/queued guard, the status bar item, and the `ignoreWatchUntil` map that stops a frontmatter write from re-triggering its own watcher.
 
@@ -3438,12 +3438,12 @@ this.app.workspace.onLayoutReady(() => {
 });
 ```
 
-- [ ] **Step 4: Typecheck and build**
+- [x] **Step 4: Typecheck and build**
 
 Run: `npm run build`
 Expected: exits 0, `main.js` regenerated.
 
-- [ ] **Step 5: Run the whole test suite**
+- [x] **Step 5: Run the whole test suite**
 
 Run: `npm test`
 Expected: PASS, every test.
@@ -3460,7 +3460,7 @@ The old `tests/capture-links.test.js` mocks `require("obsidian")` against the Co
 6. Trigger an `obsidian://finance-sms?message=...` link — message only, nothing else — and confirm the note is created at the same path shape as before, with `status: pending`, and is then parsed. Try one whose text contains `&` and confirm the whole message survives.
 7. Trigger an `obsidian://finance-transaction?amount=12&currency=EGP&account=Cash&type=debit` link and confirm the note is created `status: parsed`.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add src/ main.js manifest.json
