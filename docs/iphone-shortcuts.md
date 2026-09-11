@@ -80,10 +80,9 @@ command palette.
 ### One thing to know about skipping the encoding
 
 Because the message goes into the link as-is, a literal `&` or `#` in a bank SMS ends the
-`message` parameter early. Bank messages rarely contain either. If a note ever arrives
-with its text cut short, that is the cause — and the fix belongs in the plugin, not in
-the automation: see the note in
-`docs/superpowers/plans/2026-09-11-budget-ui-a-foundation.md`, Task 13.
+`message` parameter early. The plugin puts the message back together from the stray
+parameters that Obsidian splits off, so the whole text still lands in the note. Keep the
+automation as it is — the handling belongs in the plugin, not in the Shortcut.
 
 ---
 

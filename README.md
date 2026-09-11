@@ -71,6 +71,19 @@ palette. It has three tabs sharing one set of filters.
   transactions automatically. A transaction you excluded by hand is never overridden
   by a rule.
 
+## Upgrading to 3.0.0
+
+1. Add `opening_balance` and `opening_date` to every note in `Budget/Accounts/`. The
+   opening balance is what the account held on the opening date; the Budget view adds
+   every transaction since.
+2. `Budget/Stats/Summary.md`, `Needs Review.md`, and `transactions.csv` are no longer
+   generated and can be deleted. Use the Budget view instead, and **Export filtered
+   transactions as CSV** when you want a spreadsheet.
+3. `main.js` is now built from the TypeScript sources in `src/`. Run `npm install` and
+   `npm run build` after pulling, and do not edit `main.js` by hand.
+4. Optional: create `Budget/Settings/exclusion_rules.json` to exclude transactions
+   automatically. The editor is under **Edit exclusion rules** in the command palette.
+
 ## Developing the plugin
 
 The plugin is written in TypeScript under `Budget/obsidian-finance-automation/src/`

@@ -1689,7 +1689,7 @@ git commit -m "chore: remove the generated stats reports"
 **Files:**
 - Modify: `manifest.json`, `versions.json`, `package.json`, `README.md`, `docs/iphone-shortcuts.md`
 
-- [ ] **Step 1: Bump to 3.0.0**
+- [x] **Step 1: Bump to 3.0.0**
 
 A major bump: `main.js` is now a build artifact, three generated files are gone, and account notes need `opening_balance`.
 
@@ -1697,7 +1697,7 @@ A major bump: `main.js` is now a build artifact, three generated files are gone,
 - `package.json`: `"version": "3.0.0"`
 - `versions.json`: add `"3.0.0": "1.7.0"`
 
-- [ ] **Step 2: Write the upgrade notes in `README.md`**
+- [x] **Step 2: Write the upgrade notes in `README.md`**
 
 ```markdown
 ## Upgrading to 3.0.0
@@ -1714,7 +1714,7 @@ A major bump: `main.js` is now a build artifact, three generated files are gone,
    automatically. The editor is under **Edit exclusion rules** in the command palette.
 ```
 
-- [ ] **Step 3: Check `docs/iphone-shortcuts.md` is still accurate**
+- [x] **Step 3: Check `docs/iphone-shortcuts.md` is still accurate**
 
 The `finance-sms` handler and the note format are unchanged by these plans, so the document should still be correct. Read it and confirm:
 
@@ -1724,7 +1724,7 @@ The `finance-sms` handler and the note format are unchanged by these plans, so t
 - The account-matching section still points at `Budget/Settings/accounts.json` and its `card_endings`.
 - `Budget/Settings/iPhone Shortcut.md` in the vault matches this document.
 
-- [ ] **Step 4: Run everything one last time**
+- [x] **Step 4: Run everything one last time**
 
 ```bash
 npm test
