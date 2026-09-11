@@ -451,3 +451,6 @@
   border: 2px solid transparent; padding: 0; cursor: pointer;
 }
 .fin-swatch.is-active { border-color: var(--text-normal); }
+
+/* ---------- stats actions ---------- */
+.fin-stats-actions { padding: 0 var(--fin-gap) 96px; }

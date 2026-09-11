@@ -1284,7 +1284,7 @@ The spec drops the auto-generated `transactions.csv`; this replaces it with an e
   - `toCsv(records: TransactionRecord[]): string` — pure, tested
   - `exportCsv(app: App, records: TransactionRecord[], label: string): Promise<string>` — writes the file, returns its path
 
-- [ ] **Step 1: Write the failing test `tests/export-csv.test.ts`**
+- [x] **Step 1: Write the failing test `tests/export-csv.test.ts`**
 
 ```ts
 import test from "node:test";
@@ -1332,12 +1332,12 @@ test("the file ends with a newline", () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `node --test tests/export-csv.test.ts`
 Expected: FAIL — cannot find module `../src/ui/export-csv.ts`.
 
-- [ ] **Step 3: Write `src/ui/export-csv.ts`**
+- [x] **Step 3: Write `src/ui/export-csv.ts`**
 
 ```ts
 import { App } from "obsidian";
@@ -1401,12 +1401,12 @@ export async function exportCsv(
 }
 ```
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 Run: `node --test tests/export-csv.test.ts`
 Expected: PASS, 6 tests.
 
-- [ ] **Step 5: Add the export action**
+- [x] **Step 5: Add the export action**
 
 At the end of `StatsTab.render`:
 
@@ -1443,7 +1443,7 @@ Run: `npm run build`, reload.
 
 Check: exporting September writes `Budget/Exports/transactions-september-2026.csv`; open it and confirm the row count matches the list, that an excluded row is present with `excluded` true, and that a merchant containing a comma is quoted.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add src/ui/export-csv.ts tests/export-csv.test.ts src/ui/tabs/stats-tab.ts src/main.ts

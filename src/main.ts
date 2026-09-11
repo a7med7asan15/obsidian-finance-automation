@@ -9,6 +9,9 @@ import { TransactionIndex } from "./data/index-store.ts";
 import { createRawSmsTransaction, createStructuredTransaction } from "./data/create.ts";
 import type { ProtocolParams } from "./data/create.ts";
 import { isTransactionPath, toRecordKey } from "./data/records.ts";
+import { applyFilter } from "./domain/filter.ts";
+import { cairoToday, periodLabel } from "./domain/dates.ts";
+import { exportCsv } from "./ui/export-csv.ts";
 import { loadRules, loadVaultJson } from "./data/vault-json.ts";
 import { updateTransaction } from "./data/write.ts";
 import { resolveExclusion } from "./domain/exclusion.ts";
@@ -87,6 +90,16 @@ export default class FinanceAutomationPlugin extends Plugin {
       id: "add-transaction",
       name: "Add transaction",
       callback: () => this.openAddTransactionModal(),
+    });
+
+    this.addCommand({
+      id: "export-transactions-csv",
+      name: "Export filtered transactions as CSV",
+      callback: async () => {
+        const records = applyFilter(this.index.transactions(), this.store.get(), cairoToday());
+        const path = await exportCsv(this.app, records, periodLabel(this.store.get().period));
+        new Notice(`Exported ${records.length} transactions to ${path}.`);
+      },
     });
 
     this.addCommand({

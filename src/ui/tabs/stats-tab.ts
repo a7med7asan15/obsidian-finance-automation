@@ -1,3 +1,4 @@
+import { Notice } from "obsidian";
 import { applyFilter } from "../../domain/filter.ts";
 import {
   primaryCurrency, spendByCategory, spendByDay, spendByMerchant, spendByMonth, totalsByCurrency,
@@ -12,6 +13,7 @@ import { renderDonut } from "../charts/donut.ts";
 import { renderBars } from "../charts/bars.ts";
 import { renderHBars } from "../charts/hbars.ts";
 import { renderEmptyState } from "../components/empty-state.ts";
+import { exportCsv } from "../export-csv.ts";
 import type FinanceAutomationPlugin from "../../main.ts";
 import type { TransactionRecord } from "../../data/types.ts";
 
@@ -43,6 +45,17 @@ export class StatsTab {
     this.renderBudgetPanel(grid, records, label);
     this.renderMerchantPanel(grid, records, currency);
     this.renderBalancePanel(grid);
+
+    const actions = container.createDiv({ cls: "fin-stats-actions" });
+    const exportButton = actions.createEl("button", { cls: "fin-more", text: "Export these transactions as CSV" });
+    exportButton.addEventListener("click", async () => {
+      try {
+        const path = await exportCsv(this.plugin.app, records, periodLabel(filter.period));
+        new Notice(`Exported ${records.length} transactions to ${path}.`);
+      } catch (error) {
+        new Notice(`Export failed: ${(error as Error).message}`);
+      }
+    });
   }
 
   /** 1. Income vs expenses vs net. */
