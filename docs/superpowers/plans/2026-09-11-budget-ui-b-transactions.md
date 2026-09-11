@@ -1,6 +1,5 @@
 # Budget UI — Plan B: Transactions App Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** A Budget view with a period picker, filter bar, and a day-grouped transaction list you can edit from — plus the exclusion-rules engine wired to an editor — so the plugin becomes a usable budget tracker on iPhone and desktop.
 

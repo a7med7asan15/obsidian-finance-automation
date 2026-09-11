@@ -1,7 +1,5 @@
 # Budget UI — Plan A: Foundation Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
-
 **Goal:** Move the Finance Automation plugin onto a TypeScript + esbuild build, and add a fully unit-tested data and domain layer that later UI work reads from — without changing any behaviour a user can see.
 
 **Architecture:** Four layers, each depending only on the one beneath it: `ui/` → `store/` → `domain/` → `data/`. The hard rule that makes this work is that **`domain/` never imports from `obsidian`** — it takes plain record arrays and returns plain results, so every money calculation is a pure function testable in Node. `data/` owns the Obsidian API surface: reading frontmatter through `metadataCache`, writing it through `fileManager.processFrontMatter`.
@@ -2123,7 +2121,7 @@ The engine behind *"any SMS containing 'to Ahmed Hassan' from the CIB account sh
   - `validateRule(rule: unknown): string[]`
   - `RULE_FIELDS`, `RULE_OPS` — const arrays the rules editor builds its dropdowns from
 
-- [ ] **Step 1: Write the failing test `tests/exclusion.test.ts`**
+- [x] **Step 1: Write the failing test `tests/exclusion.test.ts`**
 
 ```ts
 import test from "node:test";
@@ -2319,12 +2317,12 @@ test("validateRule reports every problem it finds", () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `node --test tests/exclusion.test.ts`
 Expected: FAIL — cannot find module `../src/domain/exclusion.ts`.
 
-- [ ] **Step 3: Write `src/domain/exclusion.ts`**
+- [x] **Step 3: Write `src/domain/exclusion.ts`**
 
 ```ts
 import type { ExcludeSource, TransactionRecord } from "../data/types.ts";
@@ -2521,12 +2519,12 @@ export function validateRule(rule: unknown): string[] {
 }
 ```
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 Run: `node --test tests/exclusion.test.ts`
 Expected: PASS, 18 tests.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/domain/exclusion.ts tests/exclusion.test.ts

@@ -1,7 +1,5 @@
 # Budget UI — Plan C: Accounts, Stats and Release Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
-
 **Goal:** Complete the Budget view with an Accounts tab showing derived balances, a Stats tab of six panels drawn as hand-rolled SVG, a category editor, CSV export, and a markdown embed — then remove the obsolete generated reports and release.
 
 **Architecture:** Charts are built on three shared SVG primitives (`donut`, `bars`, `hbars`) that take plain data and a colour function and return an `SVGElement`. They read theme colours through CSS custom properties rather than hard-coded values, so a theme change needs no redraw logic. Every panel is a small class with `render(container, data)`; the Stats tab only assembles them.
