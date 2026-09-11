@@ -2915,7 +2915,7 @@ The first modules in this plan that touch the Obsidian API. They are thin on pur
   - `setCategory(app: App, path: string, category: string): Promise<void>`
   - `updateCategoryNote(app: App, path: string, changes: { color?: string; icon?: string; monthly_budget?: number | null }): Promise<void>`
 
-- [ ] **Step 1: Write `src/data/vault-json.ts`**
+- [x] **Step 1: Write `src/data/vault-json.ts`**
 
 ```ts
 import { App, TFile, TFolder, normalizePath } from "obsidian";
@@ -2981,7 +2981,7 @@ export async function saveRules(app: App, rules: ExclusionRule[]): Promise<void>
 }
 ```
 
-- [ ] **Step 2: Write `src/data/write.ts`**
+- [x] **Step 2: Write `src/data/write.ts`**
 
 ```ts
 import { App, TFile, normalizePath } from "obsidian";
@@ -3049,12 +3049,12 @@ export async function updateCategoryNote(
 
 Setting a field to `null` or `""` **deletes** it rather than writing an empty value, so un-excluding a transaction leaves its frontmatter as clean as it was before.
 
-- [ ] **Step 3: Typecheck**
+- [x] **Step 3: Typecheck**
 
 Run: `npm run typecheck`
 Expected: exits 0.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add src/data/vault-json.ts src/data/write.ts
