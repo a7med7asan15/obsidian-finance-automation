@@ -1954,7 +1954,7 @@ git commit -m "feat: derive account balances from opening balance and flows"
   - `interface BudgetProgress { category: string; currency: string; budget: number; spent: number; remaining: number; ratio: number; level: BudgetLevel }`
   - `budgetProgress(categories: CategoryRecord[], records: TransactionRecord[]): BudgetProgress[]`
 
-- [ ] **Step 1: Write the failing test `tests/budgets.test.ts`**
+- [x] **Step 1: Write the failing test `tests/budgets.test.ts`**
 
 ```ts
 import test from "node:test";
@@ -2030,12 +2030,12 @@ test("results are ordered most-used first", () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `node --test tests/budgets.test.ts`
 Expected: FAIL — cannot find module `../src/domain/budgets.ts`.
 
-- [ ] **Step 3: Write `src/domain/budgets.ts`**
+- [x] **Step 3: Write `src/domain/budgets.ts`**
 
 ```ts
 import { spendByCategory } from "./aggregate.ts";
@@ -2091,12 +2091,12 @@ export function budgetProgress(
 }
 ```
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 Run: `node --test tests/budgets.test.ts`
 Expected: PASS, 7 tests.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/domain/budgets.ts tests/budgets.test.ts
