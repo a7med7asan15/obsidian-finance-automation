@@ -1,15 +1,15 @@
 # Finance Automation for Obsidian
 
-Finance Automation processes SMS transaction notes and generates finance reports using the same local JavaScript engine on desktop and mobile.
+Finance Automation parses SMS transaction notes into structured frontmatter using the same local engine on desktop and mobile.
 
 ## Features
 
 - Processes pending transaction notes when Obsidian starts.
-- Processes and refreshes reports after a transaction note is created or changed.
+- Processes pending notes shortly after a transaction note is created or changed.
 - Parses configurable English and Arabic SMS patterns.
 - Captures a bank SMS from an iPhone automation through an `obsidian://` link — the message alone — and derives every field from it in the vault.
 - Captures a manual transaction from a tap-to-fill Shortcut for cash and anything with no SMS.
-- Generates `Budget/Stats/Summary.md`, `Budget/Stats/Needs Review.md`, and `Budget/Stats/transactions.csv`.
+- Applies exclusion rules, which a manual decision always overrides.
 - Shows a spinning ribbon icon while processing.
 - Uses only Obsidian APIs: no Python, desktop-only APIs, network requests, or telemetry.
 
@@ -56,9 +56,25 @@ Download `main.js`, `manifest.json`, and `styles.css` from the latest GitHub rel
 
 Restart Obsidian, then enable **Finance Automation** under Community plugins.
 
+## Developing the plugin
+
+The plugin is written in TypeScript under `Budget/obsidian-finance-automation/src/`
+and bundled to a single `main.js` by esbuild. `main.js` is a build artifact — edit the
+sources, never the bundle.
+
+```bash
+cd Budget/obsidian-finance-automation
+npm install
+npm run dev     # rebuild on change, and copy into .obsidian/plugins/finance-automation/
+npm test        # unit tests for every calculation
+npm run build   # typecheck, then a one-shot production bundle
+```
+
+After a build, reload Obsidian to pick up the new bundle.
+
 ## Privacy
 
-All parsing and report generation happen locally. The plugin does not send SMS text, transactions, or settings anywhere.
+All parsing happens locally. The plugin does not send SMS text, transactions, or settings anywhere.
 
 ## Release format
 

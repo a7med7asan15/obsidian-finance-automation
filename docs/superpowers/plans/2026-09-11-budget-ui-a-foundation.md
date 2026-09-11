@@ -3481,7 +3481,7 @@ A test that fails the build if anything under `domain/` reaches for the Obsidian
 - Consumes: nothing.
 - Produces: nothing consumed by later tasks.
 
-- [ ] **Step 1: Write the failing test `tests/architecture.test.ts`**
+- [x] **Step 1: Write the failing test `tests/architecture.test.ts`**
 
 ```ts
 import test from "node:test";
@@ -3527,12 +3527,12 @@ test("the bundle declares no runtime dependencies", async () => {
 });
 ```
 
-- [ ] **Step 2: Run the test**
+- [x] **Step 2: Run the test**
 
 Run: `node --test tests/architecture.test.ts`
 Expected: PASS. If it fails, a domain module has an Obsidian import — move whatever needs it into `src/data/`.
 
-- [ ] **Step 3: Update `README.md`**
+- [x] **Step 3: Update `README.md`**
 
 Replace the "Obsidian automation" section's build instructions with:
 
@@ -3556,12 +3556,12 @@ After a build, reload Obsidian to pick up the new bundle.
 
 Also delete the paragraph claiming reports are regenerated automatically, since the Stats generation is gone.
 
-- [ ] **Step 4: Run the full suite and build one final time**
+- [x] **Step 4: Run the full suite and build one final time**
 
 Run: `npm test && npm run build`
 Expected: both exit 0.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add tests/architecture.test.ts README.md
