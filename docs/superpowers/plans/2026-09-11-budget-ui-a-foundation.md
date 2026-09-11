@@ -226,7 +226,7 @@ Every field in this vault is optional and arrives as a string, a number, or miss
   - `readStringList(value: unknown): string[]`
   - Types: `TransactionRecord`, `AccountRecord`, `CategoryRecord`, `Filter`, `Period`, `TransactionType`, `TransactionStatus`, `ExcludeSource`, `ExcludedMode`, `PeriodUnit`
 
-- [ ] **Step 1: Write `src/constants.ts`**
+- [x] **Step 1: Write `src/constants.ts`**
 
 ```ts
 export const VAULT_ROOT = "Budget/";
@@ -241,7 +241,7 @@ export const CATEGORY_RULES_PATH = `${CATEGORIES_DIR}/rules.json`;
 export const TIMEZONE = "Africa/Cairo";
 ```
 
-- [ ] **Step 2: Write `src/data/types.ts`**
+- [x] **Step 2: Write `src/data/types.ts`**
 
 ```ts
 export type TransactionType = "debit" | "credit" | "transfer" | "fee" | "";
@@ -347,7 +347,7 @@ export const DEFAULT_FILTER: Filter = {
 
 `DEFAULT_FILTER.period.anchor` is empty because the current month is only known at runtime; the store fills it on creation.
 
-- [ ] **Step 3: Write the failing test `tests/frontmatter.test.ts`**
+- [x] **Step 3: Write the failing test `tests/frontmatter.test.ts`**
 
 ```ts
 import test from "node:test";
@@ -402,14 +402,14 @@ test("readStringList handles a list, a single value, and nothing", () => {
 });
 ```
 
-- [ ] **Step 4: Run the test to verify it fails**
+- [x] **Step 4: Run the test to verify it fails**
 
 Run: `npm test`
 Expected: FAIL — cannot find module `../src/data/frontmatter.ts`.
 
 Node 26 strips TypeScript types natively, so `node --test tests/` runs `.ts` files with no transpile step. If the installed Node is older than 22.6, add `"test": "node --experimental-strip-types --test tests/"` instead.
 
-- [ ] **Step 5: Write `src/data/frontmatter.ts`**
+- [x] **Step 5: Write `src/data/frontmatter.ts`**
 
 ```ts
 export function readString(value: unknown): string {
@@ -444,12 +444,12 @@ export function readStringList(value: unknown): string[] {
 }
 ```
 
-- [ ] **Step 6: Run the tests to verify they pass**
+- [x] **Step 6: Run the tests to verify they pass**
 
 Run: `npm test`
 Expected: PASS, 8 tests.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add src/constants.ts src/data/types.ts src/data/frontmatter.ts tests/frontmatter.test.ts
