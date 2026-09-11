@@ -1358,7 +1358,7 @@ The heart of the Stats tab and the summary strip. Two rules govern every functio
   - `groupByDay(records): Array<{ date: string; records: TransactionRecord[]; totals: Map<string, Totals> }>`
   - `primaryCurrency(records): string`
 
-- [ ] **Step 1: Write the failing test `tests/aggregate.test.ts`**
+- [x] **Step 1: Write the failing test `tests/aggregate.test.ts`**
 
 ```ts
 import test from "node:test";
@@ -1521,12 +1521,12 @@ test("primaryCurrency is the one with the most records", () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `node --test tests/aggregate.test.ts`
 Expected: FAIL — cannot find module `../src/domain/aggregate.ts`.
 
-- [ ] **Step 3: Write `src/domain/aggregate.ts`**
+- [x] **Step 3: Write `src/domain/aggregate.ts`**
 
 ```ts
 import { addMonths, daysBetween } from "./dates.ts";
@@ -1680,12 +1680,12 @@ export function primaryCurrency(records: TransactionRecord[]): string {
 }
 ```
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 Run: `node --test tests/aggregate.test.ts`
 Expected: PASS, 15 tests.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/domain/aggregate.ts tests/aggregate.test.ts
