@@ -23,7 +23,7 @@ __export(main_exports, {
   default: () => FinanceAutomationPlugin
 });
 module.exports = __toCommonJS(main_exports);
-var import_obsidian9 = require("obsidian");
+var import_obsidian12 = require("obsidian");
 
 // src/constants.ts
 var VAULT_ROOT = "Budget/";
@@ -133,6 +133,25 @@ function toDateParts(timestamp) {
 }
 function cairoToday(now = /* @__PURE__ */ new Date()) {
   return formatInCairo(now).date;
+}
+function lastDayOfMonth(year, month) {
+  return new Date(Date.UTC(year, month, 0)).getUTCDate();
+}
+function resolvePeriod(period, today) {
+  if (period.unit === "all") return null;
+  if (period.unit === "custom") {
+    const from = period.from ?? today;
+    const to = period.to ?? today;
+    return from <= to ? { from, to } : { from: to, to: from };
+  }
+  if (period.unit === "year") {
+    const year2 = /^\d{4}$/.test(period.anchor) ? period.anchor : today.slice(0, 4);
+    return { from: `${year2}-01-01`, to: `${year2}-12-31` };
+  }
+  const anchor = /^\d{4}-\d{2}$/.test(period.anchor) ? period.anchor : today.slice(0, 7);
+  const [year, month] = anchor.split("-").map(Number);
+  const last = String(lastDayOfMonth(year, month)).padStart(2, "0");
+  return { from: `${anchor}-01`, to: `${anchor}-${last}` };
 }
 function addMonths(anchor, delta) {
   const [year, month] = anchor.split("-").map(Number);
@@ -853,6 +872,17 @@ async function updateTransaction(app, path, changes) {
     }
   });
 }
+async function setExcluded(app, path, excluded, reason, source, ruleId = "") {
+  await updateTransaction(app, path, {
+    excluded: excluded ? true : null,
+    exclude_reason: excluded ? reason : null,
+    exclude_source: excluded ? source : null,
+    exclude_rule_id: excluded && ruleId ? ruleId : null
+  });
+}
+async function setCategory(app, path, category) {
+  await updateTransaction(app, path, { category });
+}
 
 // src/settings.ts
 var import_obsidian5 = require("obsidian");
@@ -977,7 +1007,7 @@ var FilterStore = class {
 };
 
 // src/ui/budget-view.ts
-var import_obsidian8 = require("obsidian");
+var import_obsidian11 = require("obsidian");
 
 // src/ui/components/period-picker.ts
 var import_obsidian6 = require("obsidian");
@@ -1058,6 +1088,42 @@ var PeriodPicker = class {
 var import_obsidian7 = require("obsidian");
 
 // src/domain/filter.ts
+function applyFilter(records, filter, today) {
+  const range = resolvePeriod(filter.period, today);
+  const search = filter.search.trim().toLowerCase();
+  const categories = new Set(filter.categories);
+  const accounts = new Set(filter.accounts);
+  const types = new Set(filter.types);
+  const statuses = new Set(filter.statuses);
+  const matched = records.filter((record) => {
+    if (filter.excluded === "hide" && record.excluded) return false;
+    if (filter.excluded === "only" && !record.excluded) return false;
+    if (range) {
+      if (!record.date) return false;
+      if (record.date < range.from || record.date > range.to) return false;
+    }
+    if (categories.size && !categories.has(record.category)) return false;
+    if (accounts.size && !accounts.has(record.fromAccount) && !accounts.has(record.toAccount)) {
+      return false;
+    }
+    if (types.size && !types.has(record.type)) return false;
+    if (statuses.size && !statuses.has(record.status)) return false;
+    if (search && !record.searchBlob.includes(search)) return false;
+    if (filter.amountMin !== null || filter.amountMax !== null) {
+      if (record.amount === null) return false;
+      const magnitude2 = Math.abs(record.amount);
+      if (filter.amountMin !== null && magnitude2 < filter.amountMin) return false;
+      if (filter.amountMax !== null && magnitude2 > filter.amountMax) return false;
+    }
+    return true;
+  });
+  return matched.sort((a, b) => (b.epoch ?? -Infinity) - (a.epoch ?? -Infinity));
+}
+function countNeedingReview(records) {
+  return records.filter(
+    (record) => !record.excluded && (record.status !== "parsed" || record.amount === null)
+  ).length;
+}
 function distinctCategories(records) {
   const names = new Set(records.map((record) => record.category).filter(Boolean));
   return [...names].sort((a, b) => a.localeCompare(b));
@@ -1234,6 +1300,368 @@ var FilterBar = class {
   }
 };
 
+// src/ui/tabs/transactions-tab.ts
+var import_obsidian10 = require("obsidian");
+
+// src/domain/aggregate.ts
+function emptyTotals() {
+  return { income: 0, expenses: 0, transfers: 0, net: 0, count: 0 };
+}
+function counts(record) {
+  return !record.excluded && record.amount !== null;
+}
+function magnitude(record) {
+  return Math.abs(record.amount ?? 0);
+}
+function isExpense(record) {
+  return record.type === "debit" || record.type === "fee";
+}
+function totalsByCurrency(records) {
+  const result = /* @__PURE__ */ new Map();
+  for (const record of records) {
+    const currency = record.currency || "Unknown";
+    const totals = result.get(currency) ?? emptyTotals();
+    result.set(currency, totals);
+    if (!counts(record)) continue;
+    const value = magnitude(record);
+    totals.count += 1;
+    if (record.type === "credit") totals.income += value;
+    else if (isExpense(record)) totals.expenses += value;
+    else if (record.type === "transfer") totals.transfers += value;
+    totals.net = totals.income - totals.expenses;
+  }
+  return result;
+}
+function groupByDay(records) {
+  const buckets = /* @__PURE__ */ new Map();
+  for (const record of records) {
+    const date = record.date ?? "";
+    const bucket = buckets.get(date) ?? [];
+    bucket.push(record);
+    buckets.set(date, bucket);
+  }
+  return [...buckets].sort((a, b) => b[0].localeCompare(a[0])).map(([date, dayRecords]) => ({ date, records: dayRecords, totals: totalsByCurrency(dayRecords) }));
+}
+
+// src/ui/format.ts
+var AMOUNT_FORMAT = new Intl.NumberFormat("en-US", {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2
+});
+var WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+var MONTHS2 = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December"
+];
+function formatAmount(amount) {
+  return AMOUNT_FORMAT.format(Math.abs(amount));
+}
+function directionOf(record) {
+  if (record.type === "credit") return "in";
+  if (record.type === "debit" || record.type === "fee") return "out";
+  return "neutral";
+}
+function formatSignedMoney(record) {
+  const direction = directionOf(record);
+  const sign = direction === "out" ? "\u2212" : direction === "in" ? "+" : "";
+  return `${sign}${formatAmount(record.amount ?? 0)}`;
+}
+function formatDayHeader(date, today) {
+  if (!date) return "No date";
+  if (date === today) return "Today";
+  const yesterday = new Date(Date.parse(`${today}T00:00:00Z`) - 864e5).toISOString().slice(0, 10);
+  if (date === yesterday) return "Yesterday";
+  const instant = /* @__PURE__ */ new Date(`${date}T00:00:00Z`);
+  const weekday = WEEKDAYS[instant.getUTCDay()];
+  const month = MONTHS2[instant.getUTCMonth()];
+  return `${weekday}, ${instant.getUTCDate()} ${month}`;
+}
+function formatTime(time) {
+  return time ?? "";
+}
+
+// src/ui/components/summary-strip.ts
+var SummaryStrip = class {
+  render(container, totals) {
+    const wrapper = container.createDiv({ cls: "fin-summary" });
+    if (!totals.size) {
+      this.renderRow(wrapper, "", { income: 0, expenses: 0, transfers: 0, net: 0, count: 0 });
+      return;
+    }
+    const currencies = [...totals.keys()].sort();
+    for (const currency of currencies) {
+      this.renderRow(wrapper, currencies.length > 1 ? currency : "", totals.get(currency));
+    }
+  }
+  renderRow(container, currencyLabel, totals) {
+    if (currencyLabel) container.createDiv({ cls: "fin-summary-currency", text: currencyLabel });
+    const row = container.createDiv({ cls: "fin-summary-row" });
+    this.cell(row, "Income", formatAmount(totals.income), "fin-in");
+    this.cell(row, "Expenses", formatAmount(totals.expenses), "fin-out");
+    this.cell(row, "Net", formatAmount(totals.net), totals.net < 0 ? "fin-out" : "fin-in");
+  }
+  cell(row, label, value, tone) {
+    const cell = row.createDiv({ cls: "fin-summary-cell" });
+    cell.createDiv({ cls: "fin-summary-label", text: label });
+    cell.createDiv({ cls: `fin-summary-value fin-amount ${tone}`, text: value });
+  }
+};
+
+// src/ui/components/transaction-row.ts
+var import_obsidian8 = require("obsidian");
+
+// src/ui/colors.ts
+var CATEGORY_PALETTE = [
+  "#3B82F6",
+  "#EF4444",
+  "#10B981",
+  "#F59E0B",
+  "#8B5CF6",
+  "#EC4899",
+  "#14B8A6",
+  "#F97316",
+  "#6366F1",
+  "#84CC16",
+  "#06B6D4",
+  "#A855F7"
+];
+var DEFAULT_ICONS = {
+  Groceries: "shopping-cart",
+  Dining: "utensils",
+  Transport: "car",
+  Bills: "receipt",
+  Shopping: "shopping-bag",
+  Health: "heart-pulse",
+  Income: "trending-up",
+  Fees: "percent",
+  Transfer: "arrow-left-right",
+  Uncategorized: "circle-help"
+};
+function hashOf(text) {
+  let hash = 2166136261;
+  for (let index = 0; index < text.length; index += 1) {
+    hash = Math.imul(hash ^ text.charCodeAt(index), 16777619) >>> 0;
+  }
+  return hash;
+}
+function categoryColor(name, categories) {
+  const configured = categories.get(name)?.color;
+  if (configured) return configured;
+  return CATEGORY_PALETTE[hashOf(name) % CATEGORY_PALETTE.length];
+}
+function categoryIcon(name, categories) {
+  return categories.get(name)?.icon ?? DEFAULT_ICONS[name] ?? "circle-dashed";
+}
+
+// src/ui/components/transaction-row.ts
+var TransactionRow = class {
+  constructor(record, categories, handlers) {
+    this.record = record;
+    this.categories = categories;
+    this.handlers = handlers;
+  }
+  render(container) {
+    const record = this.record;
+    const row = container.createDiv({ cls: "fin-row" });
+    row.toggleClass("is-excluded", record.excluded);
+    row.setAttribute("role", "button");
+    row.setAttribute("tabindex", "0");
+    const color = categoryColor(record.category, this.categories);
+    const glyph = row.createDiv({ cls: "fin-row-glyph" });
+    glyph.style.setProperty("--fin-cat-color", color);
+    (0, import_obsidian8.setIcon)(glyph, categoryIcon(record.category, this.categories));
+    const text = row.createDiv({ cls: "fin-row-text" });
+    const primary = record.merchant || record.category || record.type || "Transaction";
+    text.createDiv({ cls: "fin-row-primary", text: primary });
+    const secondaryParts = [
+      record.fromAccount || record.toAccount,
+      formatTime(record.time)
+    ].filter(Boolean);
+    text.createDiv({ cls: "fin-row-secondary", text: secondaryParts.join(" \xB7 ") });
+    if (record.status !== "parsed" || record.amount === null) {
+      const badge = text.createSpan({ cls: "fin-badge fin-badge-warn", text: "Needs review" });
+      badge.setAttribute("title", "The parser could not read every field");
+    }
+    if (record.excluded) {
+      text.createSpan({
+        cls: "fin-badge fin-badge-excluded",
+        text: record.excludeReason || "Excluded"
+      });
+    }
+    const amount = row.createDiv({ cls: "fin-row-amount" });
+    const direction = directionOf(record);
+    const value = amount.createDiv({
+      cls: `fin-amount fin-${direction}`,
+      text: record.amount === null ? "\u2014" : formatSignedMoney(record)
+    });
+    value.toggleClass("is-struck", record.excluded);
+    amount.createDiv({ cls: "fin-row-currency", text: record.currency });
+    row.addEventListener("click", () => this.handlers.onOpen(record));
+    row.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        this.handlers.onOpen(record);
+      }
+    });
+    row.addEventListener("contextmenu", (event) => {
+      event.preventDefault();
+      this.handlers.onQuickMenu(record, event);
+    });
+    let pressTimer = null;
+    row.addEventListener("touchstart", (event) => {
+      pressTimer = window.setTimeout(() => {
+        pressTimer = null;
+        const touch = event.touches[0];
+        this.handlers.onQuickMenu(record, new MouseEvent("contextmenu", {
+          clientX: touch.clientX,
+          clientY: touch.clientY
+        }));
+      }, 500);
+    }, { passive: true });
+    const cancelPress = () => {
+      if (pressTimer !== null) window.clearTimeout(pressTimer);
+      pressTimer = null;
+    };
+    row.addEventListener("touchend", cancelPress);
+    row.addEventListener("touchmove", cancelPress);
+    return row;
+  }
+};
+
+// src/ui/components/empty-state.ts
+var import_obsidian9 = require("obsidian");
+function renderEmptyState(container, icon, title, body) {
+  const wrapper = container.createDiv({ cls: "fin-empty" });
+  const iconEl = wrapper.createDiv({ cls: "fin-empty-icon" });
+  (0, import_obsidian9.setIcon)(iconEl, icon);
+  wrapper.createEl("h3", { text: title });
+  wrapper.createEl("p", { text: body });
+}
+
+// src/ui/tabs/transactions-tab.ts
+var PAGE_SIZE = 100;
+var TransactionsTab = class {
+  constructor(plugin) {
+    this.plugin = plugin;
+    this.shown = PAGE_SIZE;
+  }
+  /** Reset paging whenever the filter changes, so a new filter starts at the top. */
+  resetPaging() {
+    this.shown = PAGE_SIZE;
+  }
+  render(container) {
+    const today = cairoToday();
+    const all = this.plugin.index.transactions();
+    const filtered = applyFilter(all, this.plugin.store.get(), today);
+    const categories = new Map(this.plugin.index.categories().map((item) => [item.name, item]));
+    new SummaryStrip().render(container, totalsByCurrency(filtered));
+    const review = countNeedingReview(filtered);
+    if (review > 0) this.renderReviewBanner(container, review);
+    if (!filtered.length) {
+      renderEmptyState(
+        container,
+        "receipt",
+        all.length ? "Nothing matches these filters" : "No transactions yet",
+        all.length ? "Try a different month, or clear the filters." : "Capture one from the iPhone Shortcut, or add one by hand."
+      );
+      this.renderAddButton(container);
+      return;
+    }
+    const list = container.createDiv({ cls: "fin-list" });
+    const visible = filtered.slice(0, this.shown);
+    for (const group of groupByDay(visible)) {
+      const header = list.createDiv({ cls: "fin-day-header" });
+      header.createSpan({ cls: "fin-day-label", text: formatDayHeader(group.date, today) });
+      const totals = [...group.totals].map(
+        ([currency, dayTotals]) => `${formatAmount(dayTotals.expenses)}${group.totals.size > 1 ? ` ${currency}` : ""}`
+      ).join(" \xB7 ");
+      header.createSpan({ cls: "fin-day-total fin-amount", text: totals });
+      for (const record of group.records) {
+        new TransactionRow(record, categories, {
+          onOpen: (target) => this.plugin.openTransactionSheet(target),
+          onQuickMenu: (target, event) => this.openQuickMenu(target, event)
+        }).render(list);
+      }
+    }
+    if (filtered.length > this.shown) {
+      const more = list.createEl("button", {
+        cls: "fin-more",
+        text: `Show ${Math.min(PAGE_SIZE, filtered.length - this.shown)} more of ${filtered.length}`
+      });
+      more.addEventListener("click", () => {
+        this.shown += PAGE_SIZE;
+        this.plugin.refreshBudgetView();
+      });
+    }
+    this.renderAddButton(container);
+  }
+  renderReviewBanner(container, count) {
+    const banner = container.createDiv({ cls: "fin-banner" });
+    const icon = banner.createSpan({ cls: "fin-banner-icon" });
+    (0, import_obsidian10.setIcon)(icon, "alert-triangle");
+    banner.createSpan({
+      text: `${count} transaction${count === 1 ? "" : "s"} need${count === 1 ? "s" : ""} review`
+    });
+    const action = banner.createEl("button", { cls: "fin-banner-action", text: "Show" });
+    action.addEventListener("click", () => {
+      this.plugin.store.set({ statuses: ["needs_review", "pending"] });
+    });
+  }
+  renderAddButton(container) {
+    const button = container.createEl("button", { cls: "fin-fab", attr: { "aria-label": "Add transaction" } });
+    (0, import_obsidian10.setIcon)(button, "plus");
+    button.addEventListener("click", () => this.plugin.openAddTransactionModal());
+  }
+  openQuickMenu(record, event) {
+    const menu = new import_obsidian10.Menu();
+    menu.addItem(
+      (item) => item.setTitle(record.excluded ? "Include in calculations" : "Exclude from calculations").setIcon(record.excluded ? "eye" : "eye-off").onClick(async () => {
+        try {
+          await setExcluded(
+            this.plugin.app,
+            record.path,
+            !record.excluded,
+            record.excluded ? "" : "Excluded by hand",
+            "manual"
+          );
+        } catch (error) {
+          new import_obsidian10.Notice(`Could not update the transaction: ${error.message}`);
+        }
+      })
+    );
+    menu.addSeparator();
+    const names = this.plugin.index.categories().map((item) => item.name).sort();
+    for (const name of names.length ? names : ["Uncategorized"]) {
+      menu.addItem(
+        (item) => item.setTitle(name).setChecked(record.category === name).onClick(async () => {
+          try {
+            await setCategory(this.plugin.app, record.path, name);
+          } catch (error) {
+            new import_obsidian10.Notice(`Could not set the category: ${error.message}`);
+          }
+        })
+      );
+    }
+    menu.addSeparator();
+    menu.addItem(
+      (item) => item.setTitle("Open note").setIcon("file-text").onClick(() => {
+        void this.plugin.app.workspace.openLinkText(record.path, "", true);
+      })
+    );
+    menu.showAtMouseEvent(event);
+  }
+};
+
 // src/ui/budget-view.ts
 var BUDGET_VIEW_TYPE = "finance-budget-view";
 var TABS = [
@@ -1241,7 +1669,7 @@ var TABS = [
   { id: "accounts", label: "Accounts" },
   { id: "stats", label: "Stats" }
 ];
-var BudgetView = class extends import_obsidian8.ItemView {
+var BudgetView = class extends import_obsidian11.ItemView {
   constructor(leaf, plugin) {
     super(leaf);
     this.activeTab = "transactions";
@@ -1262,6 +1690,7 @@ var BudgetView = class extends import_obsidian8.ItemView {
     const root = this.contentEl;
     root.empty();
     root.addClass("finance-budget");
+    this.transactionsTab = new TransactionsTab(this.plugin);
     this.tabBarEl = root.createDiv({ cls: "fin-tabs" });
     this.headerEl = root.createDiv({ cls: "fin-header" });
     this.bodyEl = root.createDiv({ cls: "fin-tab-body" });
@@ -1270,6 +1699,7 @@ var BudgetView = class extends import_obsidian8.ItemView {
     this.unsubscribe.push(this.plugin.index.subscribe(() => this.renderActiveTab()));
     this.unsubscribe.push(this.plugin.store.subscribe(() => {
       void this.plugin.persistFilter();
+      this.transactionsTab.resetPaging();
       this.renderActiveTab();
     }));
   }
@@ -1306,7 +1736,7 @@ var BudgetView = class extends import_obsidian8.ItemView {
   }
   // Filled in by Task 6 (transactions) and Plan C (accounts, stats).
   renderTransactions() {
-    this.bodyEl.createEl("p", { text: "Transactions" });
+    this.transactionsTab.render(this.bodyEl);
   }
   renderAccounts() {
     this.bodyEl.createEl("p", { text: "Accounts" });
@@ -1319,7 +1749,7 @@ var BudgetView = class extends import_obsidian8.ItemView {
 // src/main.ts
 var SMS_PATTERNS_PATH = `${SETTINGS_DIR}/sms_patterns.json`;
 var PARSER_OWNED = /* @__PURE__ */ new Set(["status", "parser_confidence", "transaction_id"]);
-var FinanceAutomationPlugin = class extends import_obsidian9.Plugin {
+var FinanceAutomationPlugin = class extends import_obsidian12.Plugin {
   constructor() {
     super(...arguments);
     this.settings = { ...DEFAULT_SETTINGS };
@@ -1366,7 +1796,7 @@ var FinanceAutomationPlugin = class extends import_obsidian9.Plugin {
       name: "Apply exclusion rules to all transactions",
       callback: async () => {
         const updated = await this.applyRulesToAll();
-        new import_obsidian9.Notice(`Finance: updated ${updated} transaction(s).`);
+        new import_obsidian12.Notice(`Finance: updated ${updated} transaction(s).`);
       }
     });
     this.addSettingTab(new FinanceAutomationSettingTab(this.app, this));
@@ -1409,6 +1839,18 @@ var FinanceAutomationPlugin = class extends import_obsidian9.Plugin {
     await leaf.setViewState({ type: BUDGET_VIEW_TYPE, active: true });
     await this.app.workspace.revealLeaf(leaf);
   }
+  refreshBudgetView() {
+    for (const leaf of this.app.workspace.getLeavesOfType(BUDGET_VIEW_TYPE)) {
+      const view = leaf.view;
+      if (view instanceof BudgetView) view.renderActiveTab();
+    }
+  }
+  openTransactionSheet(record) {
+    void this.app.workspace.openLinkText(record.path, "", false);
+  }
+  openAddTransactionModal() {
+    new import_obsidian12.Notice("Coming soon");
+  }
   async persistFilter() {
     const data = await this.loadData() ?? {};
     await this.saveData({ ...data, filter: this.store.serialize() });
@@ -1416,10 +1858,10 @@ var FinanceAutomationPlugin = class extends import_obsidian9.Plugin {
   async handleCaptureLink(kind, params) {
     try {
       const file = kind === "sms" ? await createRawSmsTransaction(this.app, params, await this.loadPatterns()) : await createStructuredTransaction(this.app, params);
-      new import_obsidian9.Notice(`Finance: captured ${file.path}.`, 5e3);
+      new import_obsidian12.Notice(`Finance: captured ${file.path}.`, 5e3);
     } catch (error) {
       console.error("Finance capture link failed", error);
-      new import_obsidian9.Notice(`Finance capture failed: ${error.message}`, 1e4);
+      new import_obsidian12.Notice(`Finance capture failed: ${error.message}`, 1e4);
     }
   }
   async loadPatterns() {
@@ -1446,20 +1888,20 @@ var FinanceAutomationPlugin = class extends import_obsidian9.Plugin {
   async runFinance(showNotice) {
     if (this.running) {
       this.queued = true;
-      if (showNotice) new import_obsidian9.Notice("Finance processing is already running; another pass is queued.");
+      if (showNotice) new import_obsidian12.Notice("Finance processing is already running; another pass is queued.");
       return;
     }
     this.running = true;
     this.setStatus("running\u2026");
-    if (showNotice) new import_obsidian9.Notice("Finance: processing\u2026");
+    if (showNotice) new import_obsidian12.Notice("Finance: processing\u2026");
     try {
       const updated = await this.processPending();
       this.setStatus("ready");
-      if (showNotice) new import_obsidian9.Notice(`Finance: updated ${updated} transaction(s).`, 6e3);
+      if (showNotice) new import_obsidian12.Notice(`Finance: updated ${updated} transaction(s).`, 6e3);
     } catch (error) {
       this.setStatus("error");
       console.error("Finance automation failed", error);
-      new import_obsidian9.Notice(`Finance automation failed: ${error.message}`, 1e4);
+      new import_obsidian12.Notice(`Finance automation failed: ${error.message}`, 1e4);
     } finally {
       this.running = false;
       if (this.queued) {

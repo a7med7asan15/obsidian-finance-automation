@@ -17,6 +17,7 @@ import type { AccountConfig, CategoryRules, SmsPatterns } from "./domain/parser/
 import { DEFAULT_SETTINGS, FinanceAutomationSettingTab } from "./settings.ts";
 import { FilterStore } from "./store/filter-store.ts";
 import { BUDGET_VIEW_TYPE, BudgetView } from "./ui/budget-view.ts";
+import type { TransactionRecord } from "./data/types.ts";
 import type { FinanceSettings } from "./settings.ts";
 
 const SMS_PATTERNS_PATH = `${SETTINGS_DIR}/sms_patterns.json`;
@@ -143,6 +144,23 @@ export default class FinanceAutomationPlugin extends Plugin {
     const leaf = this.app.workspace.getLeaf("tab");
     await leaf.setViewState({ type: BUDGET_VIEW_TYPE, active: true });
     await this.app.workspace.revealLeaf(leaf);
+  }
+
+  refreshBudgetView(): void {
+    for (const leaf of this.app.workspace.getLeavesOfType(BUDGET_VIEW_TYPE)) {
+      const view = leaf.view;
+      if (view instanceof BudgetView) view.renderActiveTab();
+    }
+  }
+
+  openTransactionSheet(record: TransactionRecord): void {
+    // Filled in by Task 7.
+    void this.app.workspace.openLinkText(record.path, "", false);
+  }
+
+  openAddTransactionModal(): void {
+    // Filled in by Task 8.
+    new Notice("Coming soon");
   }
 
   async persistFilter(): Promise<void> {

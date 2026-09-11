@@ -2,6 +2,7 @@ import { ItemView } from "obsidian";
 import type { WorkspaceLeaf } from "obsidian";
 import { PeriodPicker } from "./components/period-picker.ts";
 import { FilterBar } from "./components/filter-bar.ts";
+import { TransactionsTab } from "./tabs/transactions-tab.ts";
 import type FinanceAutomationPlugin from "../main.ts";
 
 export const BUDGET_VIEW_TYPE = "finance-budget-view";
@@ -21,6 +22,7 @@ export class BudgetView extends ItemView {
   private bodyEl!: HTMLElement;
   private tabBarEl!: HTMLElement;
   private filterBar: FilterBar | null = null;
+  private transactionsTab!: TransactionsTab;
   private unsubscribe: Array<() => void> = [];
 
   constructor(leaf: WorkspaceLeaf, plugin: FinanceAutomationPlugin) {
@@ -45,6 +47,8 @@ export class BudgetView extends ItemView {
     root.empty();
     root.addClass("finance-budget");
 
+    this.transactionsTab = new TransactionsTab(this.plugin);
+
     this.tabBarEl = root.createDiv({ cls: "fin-tabs" });
     this.headerEl = root.createDiv({ cls: "fin-header" });
     this.bodyEl = root.createDiv({ cls: "fin-tab-body" });
@@ -58,6 +62,8 @@ export class BudgetView extends ItemView {
     this.unsubscribe.push(this.plugin.index.subscribe(() => this.renderActiveTab()));
     this.unsubscribe.push(this.plugin.store.subscribe(() => {
       void this.plugin.persistFilter();
+      // A new filter is a new question; start its answer at the top.
+      this.transactionsTab.resetPaging();
       this.renderActiveTab();
     }));
   }
@@ -101,7 +107,7 @@ export class BudgetView extends ItemView {
 
   // Filled in by Task 6 (transactions) and Plan C (accounts, stats).
   private renderTransactions(): void {
-    this.bodyEl.createEl("p", { text: "Transactions" });
+    this.transactionsTab.render(this.bodyEl);
   }
 
   private renderAccounts(): void {

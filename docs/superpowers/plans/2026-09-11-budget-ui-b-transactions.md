@@ -1215,7 +1215,7 @@ The payload of this plan. After this task the view shows real transactions.
   - `class TransactionsTab { constructor(plugin: FinanceAutomationPlugin); render(container: HTMLElement): void; resetPaging(): void }`
   - `renderEmptyState(container, icon: string, title: string, body: string): void`
 
-- [ ] **Step 1: Write `src/ui/components/empty-state.ts`**
+- [x] **Step 1: Write `src/ui/components/empty-state.ts`**
 
 ```ts
 import { setIcon } from "obsidian";
@@ -1234,7 +1234,7 @@ export function renderEmptyState(
 }
 ```
 
-- [ ] **Step 2: Write `src/ui/components/summary-strip.ts`**
+- [x] **Step 2: Write `src/ui/components/summary-strip.ts`**
 
 ```ts
 import { formatAmount } from "../format.ts";
@@ -1273,7 +1273,7 @@ export class SummaryStrip {
 }
 ```
 
-- [ ] **Step 3: Write `src/ui/components/transaction-row.ts`**
+- [x] **Step 3: Write `src/ui/components/transaction-row.ts`**
 
 ```ts
 import { setIcon } from "obsidian";
@@ -1375,7 +1375,7 @@ export class TransactionRow {
 }
 ```
 
-- [ ] **Step 4: Write `src/ui/tabs/transactions-tab.ts`**
+- [x] **Step 4: Write `src/ui/tabs/transactions-tab.ts`**
 
 ```ts
 import { Menu, Notice, setIcon } from "obsidian";
@@ -1525,7 +1525,7 @@ export class TransactionsTab {
 
 Writes are not followed by a manual re-render: `processFrontMatter` triggers `metadataCache.on("changed")`, the index updates that one record, and the view re-renders through its existing subscription.
 
-- [ ] **Step 5: Add the plugin hooks `src/main.ts` needs**
+- [x] **Step 5: Add the plugin hooks `src/main.ts` needs**
 
 ```ts
 refreshBudgetView(): void {
@@ -1554,7 +1554,7 @@ this.transactionsTab.render(this.bodyEl);
 
 and construct `this.transactionsTab = new TransactionsTab(this.plugin)` in `onOpen`. In the store subscription, call `this.transactionsTab.resetPaging()` before `renderActiveTab()`.
 
-- [ ] **Step 6: Style it in `styles.css`**
+- [x] **Step 6: Style it in `styles.css`**
 
 ```css
 /* ---------- summary ---------- */
@@ -1677,7 +1677,7 @@ Create three or four transaction notes with different categories, accounts, and 
 7. The "Needs review" banner appears when a note is `pending`, and "Show" filters to those.
 8. Amounts line up vertically because of tabular figures.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add src/ui/components/ src/ui/tabs/ src/ui/budget-view.ts src/main.ts styles.css
