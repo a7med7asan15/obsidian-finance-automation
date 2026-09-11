@@ -1049,7 +1049,7 @@ git commit -m "feat: build typed records from frontmatter"
   - `distinctAccounts(records: TransactionRecord[]): string[]`
 - Also produces the shared test factory `makeTransaction(overrides)` used by every later test file.
 
-- [ ] **Step 1: Write the shared test factory `tests/helpers/factory.ts`**
+- [x] **Step 1: Write the shared test factory `tests/helpers/factory.ts`**
 
 Every later test builds records through this, so a new field added to `TransactionRecord` breaks one file instead of six.
 
@@ -1082,7 +1082,7 @@ export function makeTransaction(overrides: Record<string, unknown> = {}): Transa
 }
 ```
 
-- [ ] **Step 2: Write the failing test `tests/filter.test.ts`**
+- [x] **Step 2: Write the failing test `tests/filter.test.ts`**
 
 ```ts
 import test from "node:test";
@@ -1243,16 +1243,17 @@ test("distinctCategories and distinctAccounts are sorted and deduplicated", () =
     makeTransaction({ category: "Dining", from_account: "CIB", to_account: "" }),
   ];
   assert.deepEqual(distinctCategories(records), ["Bills", "Dining"]);
-  assert.deepEqual(distinctAccounts(records), ["CIB", "Cash"]);
+  // Locale-aware sort, so "Cash" precedes "CIB" the way a reader expects.
+  assert.deepEqual(distinctAccounts(records), ["Cash", "CIB"]);
 });
 ```
 
-- [ ] **Step 3: Run the test to verify it fails**
+- [x] **Step 3: Run the test to verify it fails**
 
 Run: `node --test tests/filter.test.ts`
 Expected: FAIL — cannot find module `../src/domain/filter.ts`.
 
-- [ ] **Step 4: Write `src/domain/filter.ts`**
+- [x] **Step 4: Write `src/domain/filter.ts`**
 
 ```ts
 import { resolvePeriod } from "./dates.ts";
@@ -1324,7 +1325,7 @@ export function distinctAccounts(records: TransactionRecord[]): string[] {
 }
 ```
 
-- [ ] **Step 5: Run the tests to verify they pass**
+- [x] **Step 5: Run the tests to verify they pass**
 
 Run: `node --test tests/filter.test.ts`
 Expected: PASS, 17 tests.
