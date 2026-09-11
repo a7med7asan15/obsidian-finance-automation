@@ -1622,24 +1622,24 @@ git commit -m "feat: add finance-summary markdown embed"
 - Delete (in the vault): `Budget/Stats/Summary.md`, `Budget/Stats/Needs Review.md`, `Budget/Stats/transactions.csv`
 - Modify: `Budget/Stats/README.md`, `Budget/README.md`, `src/main.ts`
 
-- [ ] **Step 1: Confirm nothing still writes them**
+- [x] **Step 1: Confirm nothing still writes them**
 
 Run: `grep -rn "Stats/" src/ || echo "no references"`
 Expected: `no references`. If anything appears, it is leftover report code from Plan A, Task 13 — delete it.
 
-- [ ] **Step 2: Check for links into the deleted notes**
+- [x] **Step 2: Check for links into the deleted notes**
 
 Run from the vault root: `grep -rn "Stats/Summary\|Needs Review\|transactions.csv" --include="*.md" . | grep -v obsidian-finance-automation`
 
 Fix or remove any link found. The three files are generated, so nothing should legitimately depend on them — but a dangling `[[Budget/Stats/Summary]]` in a hand-written note is worth catching before the file disappears.
 
-- [ ] **Step 3: Delete the files**
+- [x] **Step 3: Delete the files**
 
 ```bash
 rm "Budget/Stats/Summary.md" "Budget/Stats/Needs Review.md" "Budget/Stats/transactions.csv"
 ```
 
-- [ ] **Step 4: Rewrite `Budget/Stats/README.md`**
+- [x] **Step 4: Rewrite `Budget/Stats/README.md`**
 
 ```markdown
 # Stats
@@ -1656,7 +1656,7 @@ sync for no benefit once the view existed.
   `Budget/Exports/`.
 ```
 
-- [ ] **Step 5: Update `Budget/README.md`**
+- [x] **Step 5: Update `Budget/README.md`**
 
 Remove the "Recommended workflow" paragraph that points at `Budget/Stats/Needs Review.md`, and replace the folder-map entry for `Budget/Stats/` with `Budget/Exports/`: generated CSV exports, safe to delete.
 
@@ -1669,13 +1669,13 @@ only as complete as the messages captured, set `balance:` from a statement occas
 — the Accounts tab shows how far the derived figure has drifted from it.
 ```
 
-- [ ] **Step 6: Build, test, and verify**
+- [x] **Step 6: Build, test, and verify**
 
 Run: `npm test && npm run build`, reload Obsidian.
 
 Check: the plugin loads with no error, nothing recreates the deleted files after a capture, and the command palette no longer offers "Refresh statistics".
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add -A
