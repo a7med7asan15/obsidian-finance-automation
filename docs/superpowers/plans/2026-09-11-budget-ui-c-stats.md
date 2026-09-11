@@ -1089,7 +1089,7 @@ git commit -m "feat: add stats tab with six panels"
 - Consumes: `updateCategoryNote` from `src/data/write.ts`; `CATEGORY_PALETTE`, `categoryColor`, `categoryIcon`.
 - Produces: `class CategoryEditorModal extends Modal { constructor(app, plugin) }`
 
-- [ ] **Step 1: Write `src/ui/components/category-editor.ts`**
+- [x] **Step 1: Write `src/ui/components/category-editor.ts`**
 
 ```ts
 import { App, Modal, Notice, Setting, setIcon } from "obsidian";
@@ -1208,7 +1208,7 @@ export class CategoryEditorModal extends Modal {
 }
 ```
 
-- [ ] **Step 2: Wire it up in `src/main.ts`**
+- [x] **Step 2: Wire it up in `src/main.ts`**
 
 ```ts
 openCategoryEditor(): void {
@@ -1226,7 +1226,7 @@ this.addCommand({
 });
 ```
 
-- [ ] **Step 3: Style it in `styles.css`**
+- [x] **Step 3: Style it in `styles.css`**
 
 ```css
 .fin-category-row { display: flex; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--fin-border); }
@@ -1261,7 +1261,7 @@ Check:
 5. Clearing a budget removes the field from the note rather than writing `0`.
 6. Typing "abc" as a budget shows a notice and changes nothing.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/ui/components/category-editor.ts src/main.ts styles.css

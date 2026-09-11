@@ -433,3 +433,21 @@
   border-top: 1px solid var(--fin-border);
   font-size: 0.9em; font-weight: 600;
 }
+
+/* ---------- category editor ---------- */
+.fin-category-row { display: flex; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--fin-border); }
+.fin-category-glyph {
+  flex: 0 0 auto; display: grid; place-items: center;
+  width: 38px; height: 38px; border-radius: 50%;
+  color: var(--fin-cat-color);
+  background: color-mix(in srgb, var(--fin-cat-color) 15%, transparent);
+}
+.fin-category-body { flex: 1 1 auto; min-width: 0; }
+.fin-category-name { font-weight: 600; margin-bottom: 6px; }
+
+.fin-swatches { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 4px; }
+.fin-swatch {
+  width: 26px; height: 26px; border-radius: 50%;
+  border: 2px solid transparent; padding: 0; cursor: pointer;
+}
+.fin-swatch.is-active { border-color: var(--text-normal); }

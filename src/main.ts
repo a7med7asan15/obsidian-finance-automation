@@ -18,6 +18,7 @@ import { DEFAULT_SETTINGS, FinanceAutomationSettingTab } from "./settings.ts";
 import { FilterStore } from "./store/filter-store.ts";
 import { BUDGET_VIEW_TYPE, BudgetView } from "./ui/budget-view.ts";
 import { AddTransactionModal } from "./ui/components/add-transaction-modal.ts";
+import { CategoryEditorModal } from "./ui/components/category-editor.ts";
 import { RulesEditorModal } from "./ui/components/rules-editor.ts";
 import { TransactionSheet } from "./ui/components/transaction-sheet.ts";
 import type { TransactionRecord } from "./data/types.ts";
@@ -86,6 +87,12 @@ export default class FinanceAutomationPlugin extends Plugin {
       id: "add-transaction",
       name: "Add transaction",
       callback: () => this.openAddTransactionModal(),
+    });
+
+    this.addCommand({
+      id: "edit-categories",
+      name: "Edit categories and budgets",
+      callback: () => this.openCategoryEditor(),
     });
 
     this.addCommand({
@@ -180,8 +187,7 @@ export default class FinanceAutomationPlugin extends Plugin {
   }
 
   openCategoryEditor(): void {
-    // Filled in by Plan C, Task 5.
-    new Notice("Coming soon");
+    new CategoryEditorModal(this.app, this).open();
   }
 
   openAddTransactionModal(): void {
