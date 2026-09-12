@@ -100,17 +100,26 @@ palette. It has three tabs sharing one set of filters.
 
 ## Developing the plugin
 
-The plugin is written in TypeScript under `Budget/obsidian-finance-automation/src/`
-and bundled to a single `main.js` by esbuild. `main.js` is a build artifact — edit the
-sources, never the bundle.
+The plugin is written in TypeScript under `src/` and bundled to a single `main.js` by
+esbuild. `main.js` is a build artifact — edit the sources, never the bundle.
+
+**Clone this repo outside your vault.** `node_modules` alone is around a thousand files
+and 43 MB; inside a vault, Obsidian indexes all of it at every launch and a sync plugin
+tries to push it, which on a phone means a long hang on a black screen at startup.
 
 ```bash
-cd Budget/obsidian-finance-automation
+git clone https://github.com/a7med7asan15/obsidian-finance-automation.git ~/dev/obsidian-finance-automation
+cd ~/dev/obsidian-finance-automation
 npm install
-npm run dev     # rebuild on change, and copy into .obsidian/plugins/finance-automation/
+npm run dev     # rebuild on change, and copy into <vault>/.obsidian/plugins/finance-automation/
 npm test        # unit tests for every calculation
 npm run build   # typecheck, then a one-shot production bundle
 ```
+
+For the build to install itself into your vault, tell it where the vault is — either
+`export OBSIDIAN_VAULT=/path/to/vault`, or write that one line into a `.vaultpath` file
+in the repo root (gitignored). Without it the bundle is still built, just not copied, and
+a path that is not a vault is skipped rather than written to.
 
 After a build, reload Obsidian to pick up the new bundle.
 
