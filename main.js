@@ -23,7 +23,7 @@ __export(main_exports, {
   default: () => FinanceAutomationPlugin
 });
 module.exports = __toCommonJS(main_exports);
-var import_obsidian20 = require("obsidian");
+var import_obsidian22 = require("obsidian");
 
 // src/constants.ts
 var VAULT_ROOT = "Budget/";
@@ -165,7 +165,7 @@ function daysBetween(from, to) {
 // src/domain/filter.ts
 function applyFilter(records, filter, today) {
   const range = resolvePeriod(filter.period, today);
-  const search = filter.search.trim().toLowerCase();
+  const search = filter.search.trim().replace(/\s+/gu, " ").toLowerCase();
   const categories = new Set(filter.categories);
   const accounts = new Set(filter.accounts);
   const types = new Set(filter.types);
@@ -210,6 +210,38 @@ function distinctAccounts(records) {
     if (record.toAccount) names.add(record.toAccount);
   }
   return [...names].sort((a, b) => a.localeCompare(b));
+}
+
+// src/domain/counterparty.ts
+var COUNTERPARTY_ROLES = ["merchant", "recipient", "sender"];
+var ROLE_LABELS = {
+  merchant: "Merchant",
+  recipient: "Recipient",
+  sender: "Sender",
+  "": "Other party"
+};
+function roleForType(type) {
+  if (type === "credit") return "sender";
+  if (type === "transfer") return "recipient";
+  return "merchant";
+}
+function counterpartyFields(name, role) {
+  const fields = { merchant: "", recipient: "", sender: "" };
+  fields[role || "merchant"] = String(name ?? "").trim();
+  return fields;
+}
+function cleanCounterpartyName(raw) {
+  return String(raw ?? "").replace(/\s+/gu, " ").replace(/^[\s\-–—*#:.,;]+/u, "").replace(/[\s\-–—*#:.,;]+$/u, "").trim();
+}
+function readCounterparty(values) {
+  for (const role of COUNTERPARTY_ROLES) {
+    const name = cleanCounterpartyName(values[role] ?? "");
+    if (name) return { counterparty: name, counterpartyRole: role };
+  }
+  return { counterparty: "", counterpartyRole: "" };
+}
+function counterpartyKey(name) {
+  return cleanCounterpartyName(name).toLocaleLowerCase();
 }
 
 // src/domain/aggregate.ts
@@ -261,8 +293,8 @@ function spendByMerchant(records, currency, limit) {
   return sumBy(
     records,
     currency,
-    (record) => record.merchant ? record.merchant.toLowerCase() : null,
-    (record) => record.merchant
+    (record) => record.counterparty ? record.counterparty.toLowerCase() : null,
+    (record) => record.counterparty
   ).slice(0, limit).map(({ label, amount, count }) => ({ merchant: label, amount, count }));
 }
 function spendByDay(records, currency, from, to) {
@@ -305,6 +337,70 @@ function primaryCurrency(records) {
   }
   const ranked = [...counted].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
   return ranked[0]?.[0] ?? "EGP";
+}
+function counterpartySummary(records) {
+  const buckets = /* @__PURE__ */ new Map();
+  for (const record of records) {
+    const name = cleanCounterpartyName(record.counterparty);
+    if (!name) continue;
+    const key2 = counterpartyKey(name);
+    let bucket = buckets.get(key2);
+    if (!bucket) {
+      bucket = {
+        key: key2,
+        name,
+        roles: [],
+        count: 0,
+        spent: 0,
+        received: 0,
+        currency: "",
+        categories: [],
+        category: "",
+        lastDate: null,
+        paths: [],
+        currencies: /* @__PURE__ */ new Map()
+      };
+      buckets.set(key2, bucket);
+    }
+    if (name.length > bucket.name.length) bucket.name = name;
+    if (record.counterpartyRole && !bucket.roles.includes(record.counterpartyRole)) {
+      bucket.roles.push(record.counterpartyRole);
+    }
+    bucket.count += 1;
+    const value = Math.abs(record.amount ?? 0);
+    if (record.type === "credit") bucket.received += value;
+    else bucket.spent += value;
+    if (record.currency) {
+      bucket.currencies.set(record.currency, (bucket.currencies.get(record.currency) ?? 0) + 1);
+    }
+    if (record.category && !bucket.categories.includes(record.category)) {
+      bucket.categories.push(record.category);
+    }
+    if (record.date && (!bucket.lastDate || record.date > bucket.lastDate)) {
+      bucket.lastDate = record.date;
+    }
+    bucket.paths.push(record.path);
+  }
+  const totals = [];
+  for (const bucket of buckets.values()) {
+    const ranked = [...bucket.currencies].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+    totals.push({
+      key: bucket.key,
+      name: bucket.name,
+      roles: bucket.roles,
+      count: bucket.count,
+      spent: bucket.spent,
+      received: bucket.received,
+      currency: ranked[0]?.[0] ?? "",
+      categories: [...bucket.categories].sort((a, b) => a.localeCompare(b)),
+      category: bucket.categories.length === 1 ? bucket.categories[0] : "",
+      lastDate: bucket.lastDate,
+      paths: bucket.paths
+    });
+  }
+  return totals.sort(
+    (a, b) => b.spent + b.received - (a.spent + a.received) || a.name.localeCompare(b.name)
+  );
 }
 
 // src/data/types.ts
@@ -563,7 +659,11 @@ function buildTransaction(frontmatter, path) {
   const excluded = readBoolean(frontmatter.excluded, false);
   const rawSource = readString(frontmatter.exclude_source).toLowerCase();
   const excludeSource = !excluded ? null : rawSource === "rule" ? "rule" : "manual";
-  const merchant = readString(frontmatter.merchant);
+  const { counterparty, counterpartyRole } = readCounterparty({
+    merchant: readString(frontmatter.merchant),
+    recipient: readString(frontmatter.recipient),
+    sender: readString(frontmatter.sender)
+  });
   const smsMessage = readString(frontmatter.sms_message);
   const category = readString(frontmatter.category) || "Uncategorized";
   const fromAccount = readString(frontmatter.from_account);
@@ -581,7 +681,8 @@ function buildTransaction(frontmatter, path) {
     fromAccount,
     toAccount,
     category,
-    merchant,
+    counterparty,
+    counterpartyRole,
     type,
     status,
     source: readString(frontmatter.source),
@@ -592,7 +693,9 @@ function buildTransaction(frontmatter, path) {
     excludeReason: readString(frontmatter.exclude_reason),
     excludeSource,
     excludeRuleId: readString(frontmatter.exclude_rule_id),
-    searchBlob: [merchant, smsMessage, category, fromAccount, toAccount].filter(Boolean).join(" ").toLowerCase()
+    // Whitespace is collapsed because a bank pads its messages with runs of
+    // spaces, and a search typed with single ones would otherwise miss them.
+    searchBlob: [counterparty, smsMessage, category, fromAccount, toAccount].filter(Boolean).join(" ").replace(/\s+/gu, " ").toLowerCase()
   };
 }
 function buildAccount(frontmatter, path) {
@@ -631,7 +734,11 @@ var RECORD_KEYS = {
   from_account: "fromAccount",
   to_account: "toAccount",
   category: "category",
-  merchant: "merchant",
+  // The three party keys are one field: a name already under any of them means
+  // the note names its party, so the parser leaves all three alone.
+  merchant: "counterparty",
+  recipient: "counterparty",
+  sender: "counterparty",
   transaction_type: "type",
   status: "status",
   parser_confidence: "parserConfidence",
@@ -743,6 +850,9 @@ var TransactionIndex = class {
   }
 };
 
+// src/data/categories.ts
+var import_obsidian5 = require("obsidian");
+
 // src/data/create.ts
 var import_obsidian4 = require("obsidian");
 
@@ -777,8 +887,10 @@ function textOf(record, field) {
   switch (field) {
     case "sms_message":
       return record.smsMessage;
+    // Kept spelled "merchant" so existing rules keep working; it matches a
+    // recipient or a sender just as well.
     case "merchant":
-      return record.merchant;
+      return record.counterparty;
     case "from_account":
       return record.fromAccount;
     case "to_account":
@@ -984,6 +1096,9 @@ function hasKeyword(text, keywords) {
 }
 
 // src/domain/categorize.ts
+function sameName(left, right) {
+  return String(left ?? "").trim().toLocaleLowerCase() === String(right ?? "").trim().toLocaleLowerCase();
+}
 function categorize(text, rules) {
   const folded = String(text ?? "").toLocaleLowerCase();
   for (const rule of rules.rules ?? []) {
@@ -993,6 +1108,80 @@ function categorize(text, rules) {
     }
   }
   return "Uncategorized";
+}
+function withKeyword(rules, category, keyword) {
+  const name = String(category ?? "").trim();
+  const word = String(keyword ?? "").trim();
+  if (!name || !word) return { rules: [...rules.rules ?? []] };
+  const folded = word.toLocaleLowerCase();
+  const next = (rules.rules ?? []).map((rule) => ({
+    category: rule.category,
+    keywords: (rule.keywords ?? []).filter(
+      (existing) => String(existing).trim().toLocaleLowerCase() !== folded
+    )
+  }));
+  const target = next.find((rule) => sameName(rule.category, name));
+  if (target) target.keywords.push(word);
+  else next.push({ category: name, keywords: [word] });
+  return { rules: next };
+}
+function withKeywords(rules, category, keywords) {
+  const name = String(category ?? "").trim();
+  if (!name) return { rules: [...rules.rules ?? []] };
+  const kept = [];
+  const seen = /* @__PURE__ */ new Set();
+  for (const raw of keywords ?? []) {
+    const word = String(raw ?? "").trim();
+    const folded = word.toLocaleLowerCase();
+    if (!word || seen.has(folded)) continue;
+    seen.add(folded);
+    kept.push(word);
+  }
+  const next = (rules.rules ?? []).map((rule) => ({
+    category: rule.category,
+    keywords: sameName(rule.category, name) ? kept : (rule.keywords ?? []).filter(
+      (existing) => !seen.has(String(existing).trim().toLocaleLowerCase())
+    )
+  }));
+  if (!next.some((rule) => sameName(rule.category, name))) {
+    next.push({ category: name, keywords: kept });
+  }
+  return { rules: next };
+}
+function renamedCategory(rules, from, into) {
+  const before = String(from ?? "").trim();
+  const after = String(into ?? "").trim();
+  if (!before || !after || sameName(before, after)) return { rules: [...rules.rules ?? []] };
+  const next = [];
+  for (const rule of rules.rules ?? []) {
+    const isMoving = sameName(rule.category, before);
+    const target = next.find((entry) => sameName(entry.category, after));
+    if (isMoving || sameName(rule.category, after)) {
+      if (target) target.keywords.push(...rule.keywords ?? []);
+      else next.push({ category: after, keywords: [...rule.keywords ?? []] });
+    } else {
+      next.push({ category: rule.category, keywords: [...rule.keywords ?? []] });
+    }
+  }
+  return { rules: next };
+}
+function withoutCategory(rules, category) {
+  const name = String(category ?? "").trim();
+  if (!name) return { rules: [...rules.rules ?? []] };
+  return { rules: (rules.rules ?? []).filter((rule) => !sameName(rule.category, name)) };
+}
+var ILLEGAL_IN_NAME = /[\\/:*?"<>|#^[\]]/;
+function categoryNameProblem(name, existing, current = "") {
+  const wanted = String(name ?? "").trim();
+  if (!wanted) return "A category needs a name.";
+  if (wanted.startsWith(".")) return "A name cannot start with a dot.";
+  const illegal = ILLEGAL_IN_NAME.exec(wanted);
+  if (illegal) return `A name cannot contain ${illegal[0]}`;
+  const clash = (existing ?? []).some(
+    (other) => sameName(other, wanted) && !sameName(other, current)
+  );
+  if (clash) return `There is already a category called ${wanted}.`;
+  return null;
 }
 
 // src/domain/parser/sms.ts
@@ -1010,6 +1199,53 @@ function stableId(text) {
     second = Math.imul(second ^ code, 2246822507) >>> 0;
   }
   return first.toString(16).padStart(8, "0") + second.toString(16).padStart(8, "0");
+}
+function extractParty(sms, patterns) {
+  const match = extractByPatterns(sms, patterns);
+  if (!match) return "";
+  return cleanCounterpartyName(match.groups?.name ?? match[1] ?? "");
+}
+var uniqueStrings = (values) => {
+  const found = [];
+  for (const value of values) {
+    const clean = String(value ?? "").trim();
+    if (clean && !found.includes(clean)) found.push(clean);
+  }
+  return found;
+};
+function mergeAccountSources(notes, config) {
+  const accounts = [];
+  const positionOf = /* @__PURE__ */ new Map();
+  const add = (name, currency, endings, aliases) => {
+    const clean = String(name ?? "").trim();
+    if (!clean) return;
+    const key2 = clean.toLocaleLowerCase();
+    const at = positionOf.get(key2);
+    if (at === void 0) {
+      positionOf.set(key2, accounts.length);
+      accounts.push({
+        name: clean,
+        currency: currency || void 0,
+        card_endings: uniqueStrings(endings),
+        aliases: uniqueStrings(aliases)
+      });
+      return;
+    }
+    const entry = accounts[at];
+    if (!entry.currency && currency) entry.currency = currency;
+    entry.card_endings = uniqueStrings([...entry.card_endings ?? [], ...endings]);
+    entry.aliases = uniqueStrings([...entry.aliases ?? [], ...aliases]);
+  };
+  for (const note of notes) add(note.name, note.currency, note.cardEndings, note.aliases);
+  for (const entry of config.accounts ?? []) {
+    add(
+      String(entry.name ?? ""),
+      String(entry.currency ?? ""),
+      (entry.card_endings ?? []).map(String),
+      (entry.aliases ?? []).map(String)
+    );
+  }
+  return { accounts };
 }
 function accountCandidates(sms, ending, accounts) {
   const folded = sms.toLocaleLowerCase();
@@ -1041,7 +1277,6 @@ function parseSms(sms, timestamp, config, patterns, accounts, categories) {
   const endingMatch = extractByPatterns(sms, patterns.card_ending_patterns);
   const ending = endingMatch?.groups?.ending ?? "";
   const candidates = accountCandidates(sms, ending, accounts);
-  const merchant = extractByPatterns(sms, patterns.merchant_patterns)?.[1]?.trim() ?? "";
   const isTransfer = hasKeyword(sms, patterns.transfer_keywords);
   const isFee = hasKeyword(sms, patterns.fee_keywords);
   const isCredit = hasKeyword(sms, patterns.credit_keywords);
@@ -1051,6 +1286,9 @@ function parseSms(sms, timestamp, config, patterns, accounts, categories) {
   else if (isFee && !isCredit) transactionType = "fee";
   else if (isCredit && !isDebit) transactionType = "credit";
   else if (isDebit && !isCredit) transactionType = "debit";
+  const role = roleForType(transactionType);
+  const merchantName = extractParty(sms, patterns.merchant_patterns);
+  const counterparty = role === "sender" ? extractParty(sms, patterns.sender_patterns) || merchantName : role === "recipient" ? extractParty(sms, patterns.recipient_patterns) || merchantName : merchantName || extractParty(sms, patterns.recipient_patterns);
   let fromAccount = "";
   let toAccount = "";
   if (transactionType === "debit" || transactionType === "fee") fromAccount = candidates[0] ?? "";
@@ -1060,7 +1298,7 @@ function parseSms(sms, timestamp, config, patterns, accounts, categories) {
     toAccount = candidates[1] ?? "";
   }
   let category = categorize(`${sms}
-${merchant}`, categories);
+${counterparty}`, categories);
   if (transactionType === "fee") category = "Fees";
   else if (transactionType === "transfer" && category === "Uncategorized") category = "Transfer";
   const checks = [amount !== null, Boolean(currency), Boolean(transactionType), candidates.length > 0];
@@ -1074,7 +1312,7 @@ ${merchant}`, categories);
     from_account: fromAccount,
     to_account: toAccount,
     category,
-    merchant,
+    ...counterpartyFields(counterparty, role),
     transaction_type: transactionType,
     status: complete ? "parsed" : "needs_review",
     parser_confidence: confidence,
@@ -1163,6 +1401,7 @@ function uniqueTransactionPath(app, timestamp) {
   return candidate;
 }
 function transactionMarkdown(fields, sms, note = "") {
+  const partyKey = roleForType(fields.transaction_type);
   const lines = [
     "---",
     "type: transaction",
@@ -1173,7 +1412,7 @@ function transactionMarkdown(fields, sms, note = "") {
     fields.from_account ? `from_account: ${yamlString(fields.from_account)}` : "from_account:",
     fields.to_account ? `to_account: ${yamlString(fields.to_account)}` : "to_account:",
     `category: ${yamlString(fields.category || "Uncategorized")}`,
-    fields.merchant ? `merchant: ${yamlString(fields.merchant)}` : "merchant:",
+    fields.counterparty ? `${partyKey}: ${yamlString(fields.counterparty)}` : `${partyKey}:`,
     fields.transaction_type ? `transaction_type: ${yamlString(fields.transaction_type)}` : "transaction_type:",
     `status: ${fields.status || "pending"}`,
     `source: ${fields.source}`,
@@ -1225,7 +1464,7 @@ async function createRawSmsTransaction(app, params, patterns = {}) {
     from_account: "",
     to_account: "",
     category: "Uncategorized",
-    merchant: "",
+    counterparty: "",
     transaction_type: "",
     status: "pending",
     source: "iphone-shortcut-sms",
@@ -1250,10 +1489,10 @@ async function createStructuredTransaction(app, params) {
   const timestamp = protocolValue(params, "timestamp", "date") || (/* @__PURE__ */ new Date()).toISOString();
   const sms = protocolValue(params, "message", "sms", "text");
   const category = protocolValue(params, "category") || "Uncategorized";
-  const merchant = protocolValue(params, "merchant");
+  const counterparty = protocolValue(params, "merchant", "recipient", "sender", "counterparty");
   const checks = [amount !== null, Boolean(currency), validType, Boolean(fromAccount || toAccount)];
   const complete = checks.every(Boolean);
-  const fingerprint = [timestamp, amount, currency, transactionType, fromAccount, toAccount, merchant].join("|");
+  const fingerprint = [timestamp, amount, currency, transactionType, fromAccount, toAccount, counterparty].join("|");
   const path = uniqueTransactionPath(app, timestamp);
   const content = transactionMarkdown({
     timestamp,
@@ -1262,7 +1501,7 @@ async function createStructuredTransaction(app, params) {
     from_account: fromAccount,
     to_account: toAccount,
     category,
-    merchant,
+    counterparty,
     transaction_type: transactionType,
     status: complete ? "parsed" : "needs_review",
     source: "iphone-shortcut-fields",
@@ -1280,7 +1519,7 @@ async function createManualTransaction(app, fields) {
     from_account: fields.fromAccount,
     to_account: fields.toAccount,
     category: fields.category || "Uncategorized",
-    merchant: fields.merchant,
+    counterparty: fields.counterparty,
     transaction_type: fields.type,
     status: "parsed",
     source: "manual-ui",
@@ -1293,15 +1532,59 @@ async function createManualTransaction(app, fields) {
         fields.type,
         fields.fromAccount,
         fields.toAccount,
-        fields.merchant
+        fields.counterparty
       ].join("|")
     )
   }, "", fields.note);
   return createFile(app, path, content);
 }
 
+// src/data/categories.ts
+function categoryNotePath(name) {
+  return `${CATEGORIES_DIR}/${String(name).trim()}.md`;
+}
+function categoryNote(draft) {
+  const lines = [
+    "---",
+    "type: category",
+    `name: ${JSON.stringify(draft.name)}`,
+    `currency: ${draft.currency || "EGP"}`,
+    `monthly_budget:${draft.monthlyBudget === null ? "" : ` ${draft.monthlyBudget}`}`
+  ];
+  if (draft.color) lines.push(`color: "${draft.color}"`);
+  if (draft.icon) lines.push(`icon: ${draft.icon}`);
+  lines.push("---", "", `# ${draft.name}`, "");
+  return lines.join("\n");
+}
+async function createCategoryNote(app, draft) {
+  const path = (0, import_obsidian5.normalizePath)(categoryNotePath(draft.name));
+  if (app.vault.getAbstractFileByPath(path)) throw new Error(`${path} already exists.`);
+  await writeVaultFile(app, path, categoryNote(draft));
+  return path;
+}
+async function renameCategoryNote(app, path, name) {
+  const file = app.vault.getAbstractFileByPath((0, import_obsidian5.normalizePath)(path));
+  if (!(file instanceof import_obsidian5.TFile)) throw new Error(`${path} is not a file.`);
+  const wanted = (0, import_obsidian5.normalizePath)(categoryNotePath(name));
+  if (wanted !== file.path) {
+    if (app.vault.getAbstractFileByPath(wanted)) throw new Error(`${wanted} already exists.`);
+    await app.fileManager.renameFile(file, wanted);
+  }
+  const moved = app.vault.getAbstractFileByPath(wanted);
+  if (!(moved instanceof import_obsidian5.TFile)) throw new Error(`Could not find ${wanted} after renaming.`);
+  await app.fileManager.processFrontMatter(moved, (frontmatter) => {
+    frontmatter.name = String(name).trim();
+  });
+  return wanted;
+}
+async function deleteCategoryNote(app, path) {
+  const file = app.vault.getAbstractFileByPath((0, import_obsidian5.normalizePath)(path));
+  if (!(file instanceof import_obsidian5.TFile)) throw new Error(`${path} is not a file.`);
+  await app.fileManager.trashFile(file);
+}
+
 // src/data/inbox.ts
-var import_obsidian5 = require("obsidian");
+var import_obsidian6 = require("obsidian");
 var CAPTURE_EXTENSIONS = /* @__PURE__ */ new Set(["txt", "md", "text", "log"]);
 var NEVER_A_MESSAGE = /* @__PURE__ */ new Set(["readme.md"]);
 function basenameOf(path) {
@@ -1314,7 +1597,7 @@ function extensionOf(path) {
 }
 async function ingestInbox(app, patterns = {}) {
   const result = { created: [], empty: [], failed: [] };
-  const directory = (0, import_obsidian5.normalizePath)(INBOX_DIR);
+  const directory = (0, import_obsidian6.normalizePath)(INBOX_DIR);
   const adapter = app.vault.adapter;
   if (!await adapter.exists(directory)) return result;
   const listed = await adapter.list(directory);
@@ -1353,7 +1636,8 @@ var COLUMNS = [
   "type",
   "from_account",
   "to_account",
-  "merchant",
+  "counterparty",
+  "counterparty_role",
   "category",
   "status",
   "excluded",
@@ -1376,7 +1660,8 @@ function toCsv(records) {
       record.type,
       record.fromAccount,
       record.toAccount,
-      record.merchant,
+      record.counterparty,
+      record.counterpartyRole,
       record.category,
       record.status,
       record.excluded,
@@ -1401,10 +1686,10 @@ async function exportCsv(app, records, label) {
 }
 
 // src/data/write.ts
-var import_obsidian6 = require("obsidian");
+var import_obsidian7 = require("obsidian");
 async function editFrontMatter(app, path, edit) {
-  const file = app.vault.getAbstractFileByPath((0, import_obsidian6.normalizePath)(path));
-  if (!(file instanceof import_obsidian6.TFile)) throw new Error(`${path} is not a file.`);
+  const file = app.vault.getAbstractFileByPath((0, import_obsidian7.normalizePath)(path));
+  if (!(file instanceof import_obsidian7.TFile)) throw new Error(`${path} is not a file.`);
   await app.fileManager.processFrontMatter(file, edit);
 }
 async function updateTransaction(app, path, changes) {
@@ -1434,14 +1719,41 @@ async function updateCategoryNote(app, path, changes) {
   });
 }
 
+// src/domain/parser/defaults.ts
+var DEFAULT_PARTY_PATTERNS = {
+  merchant_patterns: [
+    "(?i)(?:at|merchant)\\s+(?P<name>[A-Za-z0-9][A-Za-z0-9 .&'/_-]{1,60}?)(?=\\s+(?:on|using|with|via|balance|available|ref|reference|date)\\b|[.;,]|$)",
+    "(?i)(?:\u0639\u0646\u062F|\u0644\u062F\u0649|\u0645\u0646\\s+\u0645\u062D\u0644)\\s+(?P<name>[^.;,\\n]{2,60}?)(?=\\s+(?:\u0641\u064A|\u0628\u062A\u0627\u0631\u064A\u062E|\u0627\u0644\u0631\u0635\u064A\u062F|\u0645\u0631\u062C\u0639|\u0628\u0648\u0627\u0633\u0637\u0629|\u0628\u0627\u0633\u062A\u062E\u062F\u0627\u0645)|[.;,]|$)"
+  ],
+  recipient_patterns: [
+    "(?i)\\bto\\s+(?!your\\b|the\\b|a/c\\b|acct\\b|account\\b|card\\b|wallet\\b)(?P<name>[A-Za-z0-9][A-Za-z0-9 .&'/_-]{1,60}?)(?=\\s+(?:on|using|with|via|from|balance|available|ref|reference|date)\\b|[.;,]|$)",
+    "(?i)(?:\u0625\u0644\u0649|\u0627\u0644\u0649|\u0644\u062D\u0633\u0627\u0628|\u0644\u0635\u0627\u0644\u062D)\\s+(?!\u0628\u0637\u0627\u0642\u0629|\u062D\u0633\u0627\u0628|\u0631\u0642\u0645)(?P<name>[^.;,\\n]{2,60}?)(?=\\s+(?:\u0641\u064A|\u0628\u062A\u0627\u0631\u064A\u062E|\u0627\u0644\u0631\u0635\u064A\u062F|\u0645\u0631\u062C\u0639|\u0628\u0648\u0627\u0633\u0637\u0629|\u0628\u0627\u0633\u062A\u062E\u062F\u0627\u0645)|[.;,]|$)"
+  ],
+  sender_patterns: [
+    "(?i)\\bfrom\\s+(?!your\\b|the\\b|a/c\\b|acct\\b|account\\b|card\\b|wallet\\b)(?P<name>[A-Za-z0-9][A-Za-z0-9 .&'/_-]{1,60}?)(?=\\s+(?:on|using|with|via|to|balance|available|ref|reference|date)\\b|[.;,]|$)",
+    "(?i)\u0645\u0646\\s+(?!\u0628\u0637\u0627\u0642\u0629|\u062D\u0633\u0627\u0628|\u0631\u0642\u0645|\u062E\u0644\u0627\u0644)(?P<name>[^.;,\\n]{2,60}?)(?=\\s+(?:\u0641\u064A|\u0628\u062A\u0627\u0631\u064A\u062E|\u0627\u0644\u0631\u0635\u064A\u062F|\u0645\u0631\u062C\u0639|\u0625\u0644\u0649|\u0627\u0644\u0649|\u0628\u0648\u0627\u0633\u0637\u0629|\u0628\u0627\u0633\u062A\u062E\u062F\u0627\u0645)|[.;,]|$)"
+  ]
+};
+function withDefaultPatterns(patterns) {
+  const merged = { ...patterns };
+  for (const [key2, defaults] of Object.entries(DEFAULT_PARTY_PATTERNS)) {
+    const own = patterns[key2] ?? [];
+    merged[key2] = [
+      ...own,
+      ...defaults.filter((pattern) => !own.includes(pattern))
+    ];
+  }
+  return merged;
+}
+
 // src/settings.ts
-var import_obsidian8 = require("obsidian");
+var import_obsidian9 = require("obsidian");
 
 // src/ui/components/rules-editor.ts
-var import_obsidian7 = require("obsidian");
+var import_obsidian8 = require("obsidian");
 var FIELD_LABELS = {
   sms_message: "SMS text",
-  merchant: "Merchant",
+  merchant: "Merchant, recipient or sender",
   from_account: "From account",
   to_account: "To account",
   category: "Category",
@@ -1461,7 +1773,7 @@ var OP_LABELS = {
   lt: "is less than",
   between: "is between"
 };
-var RulesEditorModal = class extends import_obsidian7.Modal {
+var RulesEditorModal = class extends import_obsidian8.Modal {
   constructor(app, plugin) {
     super(app);
     this.plugin = plugin;
@@ -1496,7 +1808,7 @@ var RulesEditorModal = class extends import_obsidian7.Modal {
     }
     for (const rule of this.rules) {
       const matches = records.filter((record) => matchesRule(record, { ...rule, enabled: true })).length;
-      const setting = new import_obsidian7.Setting(contentEl).setName(rule.name).setDesc(`${this.describe(rule)} \u2014 matches ${matches} transaction${matches === 1 ? "" : "s"}`);
+      const setting = new import_obsidian8.Setting(contentEl).setName(rule.name).setDesc(`${this.describe(rule)} \u2014 matches ${matches} transaction${matches === 1 ? "" : "s"}`);
       setting.addToggle(
         (toggle) => toggle.setValue(rule.enabled).onChange(async (value) => {
           rule.enabled = value;
@@ -1533,7 +1845,7 @@ var RulesEditorModal = class extends import_obsidian7.Modal {
     const apply = actions.createEl("button", { cls: "mod-cta", text: "Apply to all transactions" });
     apply.addEventListener("click", async () => {
       const updated = await this.plugin.applyRulesToAll();
-      new import_obsidian7.Notice(`Updated ${updated} transaction${updated === 1 ? "" : "s"}.`);
+      new import_obsidian8.Notice(`Updated ${updated} transaction${updated === 1 ? "" : "s"}.`);
       this.draw();
     });
   }
@@ -1545,11 +1857,11 @@ var RulesEditorModal = class extends import_obsidian7.Modal {
     try {
       await saveRules(this.app, this.rules);
     } catch (error) {
-      new import_obsidian7.Notice(`Could not save the rules: ${error.message}`);
+      new import_obsidian8.Notice(`Could not save the rules: ${error.message}`);
     }
   }
 };
-var RuleEditModal = class extends import_obsidian7.Modal {
+var RuleEditModal = class extends import_obsidian8.Modal {
   constructor(app, plugin, existing, onSave) {
     super(app);
     this.plugin = plugin;
@@ -1571,17 +1883,17 @@ var RuleEditModal = class extends import_obsidian7.Modal {
     const { contentEl } = this;
     contentEl.empty();
     contentEl.createEl("h2", { text: this.rule.name || "New rule" });
-    new import_obsidian7.Setting(contentEl).setName("Name").addText(
+    new import_obsidian8.Setting(contentEl).setName("Name").addText(
       (text) => text.setPlaceholder("Transfer to my own account").setValue(this.rule.name).onChange((value) => {
         this.rule.name = value;
       })
     );
-    new import_obsidian7.Setting(contentEl).setName("Reason").setDesc("Shown on every transaction this rule excludes.").addText(
+    new import_obsidian8.Setting(contentEl).setName("Reason").setDesc("Shown on every transaction this rule excludes.").addText(
       (text) => text.setPlaceholder("Transfer between my own accounts").setValue(this.rule.reason).onChange((value) => {
         this.rule.reason = value;
       })
     );
-    new import_obsidian7.Setting(contentEl).setName("Match").addDropdown((dropdown) => {
+    new import_obsidian8.Setting(contentEl).setName("Match").addDropdown((dropdown) => {
       dropdown.addOption("all", "All conditions");
       dropdown.addOption("any", "Any condition");
       dropdown.setValue(this.rule.match).onChange((value) => {
@@ -1667,14 +1979,14 @@ var RuleEditModal = class extends import_obsidian7.Modal {
     const list = this.previewEl.createEl("ul", { cls: "fin-rule-preview-list" });
     for (const record of matches.slice(0, 5)) {
       list.createEl("li", {
-        text: `${record.date ?? "?"} \xB7 ${record.merchant || record.category} \xB7 ${record.amount ?? "?"} ${record.currency}`
+        text: `${record.date ?? "?"} \xB7 ${record.counterparty || record.category} \xB7 ${record.amount ?? "?"} ${record.currency}`
       });
     }
   }
   async save() {
     const errors = validateRule(this.rule);
     if (errors.length) {
-      new import_obsidian7.Notice(errors.join("\n"));
+      new import_obsidian8.Notice(errors.join("\n"));
       return;
     }
     if (!this.rule.reason) this.rule.reason = this.rule.name;
@@ -1689,7 +2001,7 @@ var DEFAULT_SETTINGS = {
   watchTransactions: true,
   applyExclusionRules: true
 };
-var FinanceAutomationSettingTab = class extends import_obsidian8.PluginSettingTab {
+var FinanceAutomationSettingTab = class extends import_obsidian9.PluginSettingTab {
   constructor(app, plugin) {
     super(app, plugin);
     this.plugin = plugin;
@@ -1701,24 +2013,24 @@ var FinanceAutomationSettingTab = class extends import_obsidian8.PluginSettingTa
     containerEl.createEl("p", {
       text: "The same local engine runs on desktop and mobile, parsing pending notes and keeping the Budget view up to date."
     });
-    new import_obsidian8.Setting(containerEl).setName("Process when Obsidian starts").setDesc("Parse pending notes shortly after opening the vault.").addToggle(
+    new import_obsidian9.Setting(containerEl).setName("Process when Obsidian starts").setDesc("Parse pending notes shortly after opening the vault.").addToggle(
       (toggle) => toggle.setValue(this.plugin.settings.runOnStartup).onChange(async (value) => {
         this.plugin.settings.runOnStartup = value;
         await this.plugin.saveSettings();
       })
     );
-    new import_obsidian8.Setting(containerEl).setName("Watch transaction notes").setDesc("Run automatically shortly after a transaction note is created or changed.").addToggle(
+    new import_obsidian9.Setting(containerEl).setName("Watch transaction notes").setDesc("Run automatically shortly after a transaction note is created or changed.").addToggle(
       (toggle) => toggle.setValue(this.plugin.settings.watchTransactions).onChange(async (value) => {
         this.plugin.settings.watchTransactions = value;
         await this.plugin.saveSettings();
       })
     );
-    new import_obsidian8.Setting(containerEl).setName("Exclusion rules").setDesc("Rules that automatically exclude matching transactions from calculations.").addButton(
+    new import_obsidian9.Setting(containerEl).setName("Exclusion rules").setDesc("Rules that automatically exclude matching transactions from calculations.").addButton(
       (button) => button.setButtonText("Edit rules").onClick(() => {
         new RulesEditorModal(this.app, this.plugin).open();
       })
     );
-    new import_obsidian8.Setting(containerEl).setName("Apply exclusion rules automatically").setDesc("Run the exclusion rules whenever a transaction note is created or changed.").addToggle(
+    new import_obsidian9.Setting(containerEl).setName("Apply exclusion rules automatically").setDesc("Run the exclusion rules whenever a transaction note is created or changed.").addToggle(
       (toggle) => toggle.setValue(this.plugin.settings.applyExclusionRules).onChange(async (value) => {
         this.plugin.settings.applyExclusionRules = value;
         await this.plugin.saveSettings();
@@ -1797,10 +2109,10 @@ var FilterStore = class {
 };
 
 // src/ui/budget-view.ts
-var import_obsidian16 = require("obsidian");
+var import_obsidian19 = require("obsidian");
 
 // src/ui/components/period-picker.ts
-var import_obsidian9 = require("obsidian");
+var import_obsidian10 = require("obsidian");
 var QUICK_CHIPS = [
   { label: "This month", build: (today) => ({ unit: "month", anchor: today.slice(0, 7), from: null, to: null }) },
   {
@@ -1824,12 +2136,12 @@ var PeriodPicker = class {
     const wrapper = container.createDiv({ cls: "fin-period" });
     const stepper = wrapper.createDiv({ cls: "fin-period-stepper" });
     const back = stepper.createEl("button", { cls: "fin-icon-button", attr: { "aria-label": "Previous period" } });
-    (0, import_obsidian9.setIcon)(back, "chevron-left");
+    (0, import_obsidian10.setIcon)(back, "chevron-left");
     back.addEventListener("click", () => this.store.step(-1));
     const label = stepper.createEl("button", { cls: "fin-period-label", text: periodLabel(period) });
     label.addEventListener("click", (event) => this.openUnitMenu(event, today));
     const forward = stepper.createEl("button", { cls: "fin-icon-button", attr: { "aria-label": "Next period" } });
-    (0, import_obsidian9.setIcon)(forward, "chevron-right");
+    (0, import_obsidian10.setIcon)(forward, "chevron-right");
     forward.addEventListener("click", () => this.store.step(1));
     const steppable = period.unit === "month" || period.unit === "year";
     back.toggleClass("is-hidden", !steppable);
@@ -1844,7 +2156,7 @@ var PeriodPicker = class {
     }
   }
   openUnitMenu(event, today) {
-    const menu = new import_obsidian9.Menu();
+    const menu = new import_obsidian10.Menu();
     const current = this.store.get().period;
     const units = [
       { unit: "month", label: "Month" },
@@ -1875,7 +2187,7 @@ var PeriodPicker = class {
 };
 
 // src/ui/components/filter-bar.ts
-var import_obsidian10 = require("obsidian");
+var import_obsidian11 = require("obsidian");
 var TYPE_OPTIONS = [
   { value: "debit", label: "Spending" },
   { value: "credit", label: "Income" },
@@ -1911,10 +2223,10 @@ var FilterBar = class {
     const bar = container.createDiv({ cls: "fin-filter-bar" });
     const searchRow = bar.createDiv({ cls: "fin-search" });
     const searchIcon = searchRow.createSpan({ cls: "fin-search-icon" });
-    (0, import_obsidian10.setIcon)(searchIcon, "search");
+    (0, import_obsidian11.setIcon)(searchIcon, "search");
     const input = searchRow.createEl("input", {
       cls: "fin-search-input",
-      attr: { type: "search", placeholder: "Search merchant, SMS, category", value: filter.search }
+      attr: { type: "search", placeholder: "Search name, SMS, category", value: filter.search }
     });
     let timer = null;
     input.addEventListener("input", () => {
@@ -1987,7 +2299,7 @@ var FilterBar = class {
     const button = container.createEl("button", { cls: "fin-chip", text });
     button.toggleClass("is-active", selected.length > 0);
     button.addEventListener("click", (event) => {
-      const menu = new import_obsidian10.Menu();
+      const menu = new import_obsidian11.Menu();
       if (!options.length) {
         menu.addItem((item) => item.setTitle("Nothing to filter by").setDisabled(true));
       }
@@ -2010,7 +2322,7 @@ var FilterBar = class {
     const button = container.createEl("button", { cls: "fin-chip", text: current.label });
     button.toggleClass("is-active", selected !== options[0].value);
     button.addEventListener("click", (event) => {
-      const menu = new import_obsidian10.Menu();
+      const menu = new import_obsidian11.Menu();
       for (const option of options) {
         menu.addItem(
           (item) => item.setTitle(option.label).setChecked(option.value === selected).onClick(() => apply(option.value))
@@ -2039,7 +2351,7 @@ var FilterBar = class {
 };
 
 // src/ui/tabs/transactions-tab.ts
-var import_obsidian13 = require("obsidian");
+var import_obsidian14 = require("obsidian");
 
 // src/ui/components/summary-strip.ts
 var SummaryStrip = class {
@@ -2069,7 +2381,7 @@ var SummaryStrip = class {
 };
 
 // src/ui/components/transaction-row.ts
-var import_obsidian11 = require("obsidian");
+var import_obsidian12 = require("obsidian");
 var TransactionRow = class {
   constructor(record, categories, handlers) {
     this.record = record;
@@ -2085,9 +2397,9 @@ var TransactionRow = class {
     const color = categoryColor(record.category, this.categories);
     const glyph = row.createDiv({ cls: "fin-row-glyph" });
     glyph.style.setProperty("--fin-cat-color", color);
-    (0, import_obsidian11.setIcon)(glyph, categoryIcon(record.category, this.categories));
+    (0, import_obsidian12.setIcon)(glyph, categoryIcon(record.category, this.categories));
     const text = row.createDiv({ cls: "fin-row-text" });
-    const primary = record.merchant || record.category || record.type || "Transaction";
+    const primary = record.counterparty || record.category || record.type || "Transaction";
     text.createDiv({ cls: "fin-row-primary", text: primary });
     const secondaryParts = [
       record.fromAccount || record.toAccount,
@@ -2145,11 +2457,11 @@ var TransactionRow = class {
 };
 
 // src/ui/components/empty-state.ts
-var import_obsidian12 = require("obsidian");
+var import_obsidian13 = require("obsidian");
 function renderEmptyState(container, icon, title, body) {
   const wrapper = container.createDiv({ cls: "fin-empty" });
   const iconEl = wrapper.createDiv({ cls: "fin-empty-icon" });
-  (0, import_obsidian12.setIcon)(iconEl, icon);
+  (0, import_obsidian13.setIcon)(iconEl, icon);
   wrapper.createEl("h3", { text: title });
   wrapper.createEl("p", { text: body });
 }
@@ -2214,7 +2526,7 @@ var TransactionsTab = class {
   renderReviewBanner(container, count) {
     const banner = container.createDiv({ cls: "fin-banner" });
     const icon = banner.createSpan({ cls: "fin-banner-icon" });
-    (0, import_obsidian13.setIcon)(icon, "alert-triangle");
+    (0, import_obsidian14.setIcon)(icon, "alert-triangle");
     banner.createSpan({
       text: `${count} transaction${count === 1 ? "" : "s"} need${count === 1 ? "s" : ""} review`
     });
@@ -2225,11 +2537,11 @@ var TransactionsTab = class {
   }
   renderAddButton(container) {
     const button = container.createEl("button", { cls: "fin-fab", attr: { "aria-label": "Add transaction" } });
-    (0, import_obsidian13.setIcon)(button, "plus");
+    (0, import_obsidian14.setIcon)(button, "plus");
     button.addEventListener("click", () => this.plugin.openAddTransactionModal());
   }
   openQuickMenu(record, event) {
-    const menu = new import_obsidian13.Menu();
+    const menu = new import_obsidian14.Menu();
     menu.addItem(
       (item) => item.setTitle(record.excluded ? "Include in calculations" : "Exclude from calculations").setIcon(record.excluded ? "eye" : "eye-off").onClick(async () => {
         try {
@@ -2241,7 +2553,7 @@ var TransactionsTab = class {
             "manual"
           );
         } catch (error) {
-          new import_obsidian13.Notice(`Could not update the transaction: ${error.message}`);
+          new import_obsidian14.Notice(`Could not update the transaction: ${error.message}`);
         }
       })
     );
@@ -2253,7 +2565,7 @@ var TransactionsTab = class {
           try {
             await setCategory(this.plugin.app, record.path, name);
           } catch (error) {
-            new import_obsidian13.Notice(`Could not set the category: ${error.message}`);
+            new import_obsidian14.Notice(`Could not set the category: ${error.message}`);
           }
         })
       );
@@ -2269,7 +2581,7 @@ var TransactionsTab = class {
 };
 
 // src/ui/tabs/accounts-tab.ts
-var import_obsidian14 = require("obsidian");
+var import_obsidian15 = require("obsidian");
 
 // src/domain/balances.ts
 var key = (name) => name.trim().toLowerCase();
@@ -2379,7 +2691,7 @@ var AccountsTab = class {
       const card = list.createDiv({ cls: "fin-account-card" });
       const head = card.createDiv({ cls: "fin-account-head" });
       const icon = head.createDiv({ cls: "fin-account-icon" });
-      (0, import_obsidian14.setIcon)(icon, TYPE_ICONS[item.account.accountType] ?? "wallet");
+      (0, import_obsidian15.setIcon)(icon, TYPE_ICONS[item.account.accountType] ?? "wallet");
       const names = head.createDiv({ cls: "fin-account-names" });
       names.createDiv({ cls: "fin-account-name", text: item.account.name });
       names.createDiv({
@@ -2426,8 +2738,628 @@ var AccountsTab = class {
   }
 };
 
+// src/ui/tabs/merchants-tab.ts
+var import_obsidian17 = require("obsidian");
+
+// src/data/category-rules.ts
+async function loadCategoryRules(app) {
+  return loadVaultJson(app, CATEGORY_RULES_PATH, { rules: [] });
+}
+async function saveCategoryRules(app, rules) {
+  await saveVaultJson(app, CATEGORY_RULES_PATH, { rules: rules.rules ?? [] });
+}
+
+// src/ui/components/category-editor.ts
+var import_obsidian16 = require("obsidian");
+var ICON_CHOICES = [
+  "shopping-cart",
+  "utensils",
+  "car",
+  "receipt",
+  "shopping-bag",
+  "heart-pulse",
+  "trending-up",
+  "percent",
+  "arrow-left-right",
+  "home",
+  "plane",
+  "gift",
+  "smartphone",
+  "graduation-cap",
+  "dumbbell",
+  "circle-dashed"
+];
+var FALLBACK_CATEGORY = "Uncategorized";
+var CategoryEditorModal = class extends import_obsidian16.Modal {
+  constructor(app, plugin) {
+    super(app);
+    this.plugin = plugin;
+    this.rules = { rules: [] };
+    this.rulesError = null;
+    this.shape = "";
+    this.stopWatching = null;
+  }
+  async onOpen() {
+    this.modalEl.addClass("fin-sheet");
+    try {
+      this.rules = await loadCategoryRules(this.app);
+    } catch (error) {
+      this.rulesError = error.message;
+    }
+    this.shape = this.shapeOfCategories();
+    this.stopWatching = this.plugin.index.subscribe(() => {
+      const shape = this.shapeOfCategories();
+      if (shape === this.shape) return;
+      this.shape = shape;
+      this.draw();
+    });
+    this.draw();
+  }
+  onClose() {
+    this.stopWatching?.();
+    this.stopWatching = null;
+  }
+  shapeOfCategories() {
+    return this.categories().map((entry) => `${entry.path} ${entry.name}`).join("");
+  }
+  categories() {
+    return [...this.plugin.index.categories()].sort((a, b) => a.name.localeCompare(b.name));
+  }
+  draw() {
+    const { contentEl } = this;
+    contentEl.empty();
+    contentEl.createEl("h2", { text: "Categories and budgets" });
+    const categories = this.categories();
+    if (!categories.length) {
+      contentEl.createEl("p", {
+        cls: "fin-sheet-note",
+        text: "No categories yet. Each one is a note under Budget/Settings/Categories/; the button below writes it for you."
+      });
+    }
+    if (this.rulesError) {
+      const problem = contentEl.createDiv({ cls: "fin-rule-error" });
+      problem.createEl("strong", { text: "The keyword rules could not be read:" });
+      problem.createEl("pre", { text: this.rulesError });
+      problem.createEl("p", {
+        text: "Fix Budget/Settings/Categories/rules.json, then reopen this window. Colours and budgets can still be changed; keywords cannot, because saving them would discard the rules that failed to load."
+      });
+    }
+    const counts2 = this.transactionCounts();
+    for (const category of categories) this.renderRow(contentEl, category, counts2);
+    const actions = contentEl.createDiv({ cls: "fin-sheet-actions" });
+    const add = actions.createEl("button", { cls: "mod-cta", text: "New category" });
+    add.addEventListener("click", () => {
+      new CategoryNameModal(this.app, {
+        title: "New category",
+        submit: "Create",
+        value: "",
+        taken: categories.map((entry) => entry.name),
+        onSubmit: (name) => this.create(name)
+      }).open();
+    });
+  }
+  /** How many transactions each category holds, counted once for the whole list. */
+  transactionCounts() {
+    const counts2 = /* @__PURE__ */ new Map();
+    for (const record of this.plugin.index.transactions()) {
+      counts2.set(record.category, (counts2.get(record.category) ?? 0) + 1);
+    }
+    return counts2;
+  }
+  renderRow(container, category, counts2) {
+    const map = /* @__PURE__ */ new Map([[category.name, category]]);
+    const row = container.createDiv({ cls: "fin-category-row" });
+    const glyph = row.createDiv({ cls: "fin-category-glyph" });
+    const paintGlyph = (color, icon) => {
+      glyph.empty();
+      glyph.style.setProperty("--fin-cat-color", color);
+      (0, import_obsidian16.setIcon)(glyph, icon);
+    };
+    paintGlyph(categoryColor(category.name, map), categoryIcon(category.name, map));
+    const body = row.createDiv({ cls: "fin-category-body" });
+    const head = body.createDiv({ cls: "fin-category-head" });
+    head.createDiv({ cls: "fin-category-name", text: category.name });
+    const held = counts2.get(category.name) ?? 0;
+    head.createSpan({
+      cls: "fin-category-count",
+      text: `${held} transaction${held === 1 ? "" : "s"}`
+    });
+    const tools = head.createDiv({ cls: "fin-category-actions" });
+    const rename = tools.createEl("button", {
+      cls: "clickable-icon",
+      attr: { "aria-label": `Rename ${category.name}` }
+    });
+    (0, import_obsidian16.setIcon)(rename, "pencil");
+    rename.addEventListener("click", () => {
+      new CategoryNameModal(this.app, {
+        title: `Rename ${category.name}`,
+        submit: "Rename",
+        value: category.name,
+        taken: this.categories().map((entry) => entry.name),
+        current: category.name,
+        onSubmit: (name) => this.rename(category, name)
+      }).open();
+    });
+    const remove = tools.createEl("button", {
+      cls: "clickable-icon",
+      attr: { "aria-label": `Delete ${category.name}` }
+    });
+    (0, import_obsidian16.setIcon)(remove, "trash");
+    remove.addEventListener("click", () => {
+      new DeleteCategoryModal(this.app, {
+        category,
+        held,
+        others: this.categories().map((entry) => entry.name).filter((name) => name !== category.name),
+        onConfirm: (destination) => this.remove(category, destination)
+      }).open();
+    });
+    const swatches = body.createDiv({ cls: "fin-swatches" });
+    for (const color of CATEGORY_PALETTE) {
+      const swatch = swatches.createEl("button", { cls: "fin-swatch", attr: { "aria-label": `Colour ${color}` } });
+      swatch.style.background = color;
+      swatch.toggleClass("is-active", category.color === color);
+      swatch.addEventListener("click", async () => {
+        try {
+          await updateCategoryNote(this.app, category.path, { color });
+          category.color = color;
+          swatches.querySelectorAll(".fin-swatch").forEach((other) => other.removeClass("is-active"));
+          swatch.addClass("is-active");
+          paintGlyph(color, categoryIcon(category.name, map));
+        } catch (error) {
+          new import_obsidian16.Notice(`Could not save the colour: ${error.message}`);
+        }
+      });
+    }
+    new import_obsidian16.Setting(body).setName("Icon").addDropdown((dropdown) => {
+      for (const icon of ICON_CHOICES) dropdown.addOption(icon, icon);
+      dropdown.setValue(category.icon ?? categoryIcon(category.name, map));
+      dropdown.onChange(async (value) => {
+        try {
+          await updateCategoryNote(this.app, category.path, { icon: value });
+          category.icon = value;
+          paintGlyph(categoryColor(category.name, map), value);
+        } catch (error) {
+          new import_obsidian16.Notice(`Could not save the icon: ${error.message}`);
+        }
+      });
+    });
+    new import_obsidian16.Setting(body).setName("Monthly budget").setDesc(category.currency).addText((text) => {
+      text.inputEl.type = "number";
+      text.inputEl.inputMode = "decimal";
+      text.setPlaceholder("none");
+      text.setValue(category.monthlyBudget === null ? "" : String(category.monthlyBudget));
+      text.inputEl.addEventListener("change", async () => {
+        const raw = text.inputEl.value.trim();
+        const parsed = raw === "" ? null : Number(raw.replaceAll(",", ""));
+        if (parsed !== null && !Number.isFinite(parsed)) {
+          new import_obsidian16.Notice("That budget is not a number.");
+          return;
+        }
+        try {
+          await updateCategoryNote(this.app, category.path, { monthly_budget: parsed });
+          category.monthlyBudget = parsed;
+        } catch (error) {
+          new import_obsidian16.Notice(`Could not save the budget: ${error.message}`);
+        }
+      });
+    });
+    if (!this.rulesError) this.renderKeywords(body, category);
+  }
+  /**
+   * The words that file a message here on their own. This is the same list the
+   * Merchants tab writes to a name at a time, opened up so a phrase no merchant
+   * is named after can be added by hand.
+   */
+  renderKeywords(body, category) {
+    const folded = category.name.trim().toLocaleLowerCase();
+    const current = this.rules.rules.find(
+      (rule) => String(rule.category).trim().toLocaleLowerCase() === folded
+    );
+    new import_obsidian16.Setting(body).setName("Keywords").setDesc("Separated by commas. A message containing one of them files itself here.").addTextArea((area) => {
+      area.inputEl.addClass("fin-keyword-input");
+      area.inputEl.rows = 2;
+      area.setPlaceholder("carrefour, seoudi");
+      area.setValue((current?.keywords ?? []).join(", "));
+      area.inputEl.addEventListener("change", async () => {
+        const next = withKeywords(this.rules, category.name, area.inputEl.value.split(","));
+        try {
+          await saveCategoryRules(this.app, next);
+          this.rules = next;
+          this.draw();
+        } catch (error) {
+          new import_obsidian16.Notice(`Could not save the keywords: ${error.message}`);
+        }
+      });
+    });
+  }
+  async create(name) {
+    try {
+      await this.plugin.createCategory(name);
+      new import_obsidian16.Notice(`Added ${name}.`);
+      this.draw();
+    } catch (error) {
+      new import_obsidian16.Notice(`Could not create the category: ${error.message}`, 1e4);
+    }
+  }
+  /**
+   * Renames the note first, so a name its file cannot take fails before
+   * anything moves, then re-files the transactions and the keyword rule behind
+   * it. A failure part-way through still says how far it got.
+   */
+  async rename(category, name) {
+    const from = category.name;
+    let moved = 0;
+    try {
+      const path = await renameCategoryNote(this.app, category.path, name);
+      moved = await this.plugin.recategorize(from, name);
+      if (!this.rulesError) {
+        const next = renamedCategory(this.rules, from, name);
+        await saveCategoryRules(this.app, next);
+        this.rules = next;
+      }
+      this.plugin.index.refreshPath(path);
+      new import_obsidian16.Notice(
+        `Renamed ${from} to ${name} and re-filed ${moved} transaction${moved === 1 ? "" : "s"}.`,
+        6e3
+      );
+      this.draw();
+    } catch (error) {
+      new import_obsidian16.Notice(
+        `Renaming stopped after ${moved} transaction${moved === 1 ? "" : "s"}: ${error.message}`,
+        1e4
+      );
+      this.draw();
+    }
+  }
+  /**
+   * Moves the transactions before deleting the note, so nothing is left naming
+   * a category that no longer exists even if the delete fails.
+   *
+   * The keywords follow the transactions to their new home, since a message
+   * that used to belong here still belongs wherever these went. The exception
+   * is Uncategorized, which is where a message lands when no keyword matches it
+   * at all, so there the words are simply dropped.
+   */
+  async remove(category, destination) {
+    let moved = 0;
+    try {
+      moved = await this.plugin.recategorize(category.name, destination);
+      if (!this.rulesError) {
+        const next = destination === FALLBACK_CATEGORY ? withoutCategory(this.rules, category.name) : renamedCategory(this.rules, category.name, destination);
+        await saveCategoryRules(this.app, next);
+        this.rules = next;
+      }
+      await deleteCategoryNote(this.app, category.path);
+      new import_obsidian16.Notice(
+        `Deleted ${category.name}. ${moved} transaction${moved === 1 ? "" : "s"} moved to ${destination}.`,
+        6e3
+      );
+      this.draw();
+    } catch (error) {
+      new import_obsidian16.Notice(
+        `Deleting stopped after moving ${moved} transaction${moved === 1 ? "" : "s"}: ${error.message}`,
+        1e4
+      );
+      this.draw();
+    }
+  }
+};
+var CategoryNameModal = class extends import_obsidian16.Modal {
+  constructor(app, prompt) {
+    super(app);
+    this.prompt = prompt;
+    this.value = prompt.value;
+  }
+  onOpen() {
+    const { contentEl } = this;
+    this.modalEl.addClass("fin-sheet");
+    contentEl.empty();
+    contentEl.createEl("h2", { text: this.prompt.title });
+    const problem = contentEl.createEl("p", { cls: "fin-rule-error-text is-hidden" });
+    const submit = async () => {
+      const name = this.value.trim();
+      const reason = categoryNameProblem(name, this.prompt.taken, this.prompt.current ?? "");
+      if (reason) {
+        problem.setText(reason);
+        problem.removeClass("is-hidden");
+        return;
+      }
+      this.close();
+      await this.prompt.onSubmit(name);
+    };
+    new import_obsidian16.Setting(contentEl).setName("Name").setDesc("This is the name on the note and on every transaction filed here.").addText((text) => {
+      text.setPlaceholder("Groceries").setValue(this.value);
+      text.onChange((value) => {
+        this.value = value;
+        problem.addClass("is-hidden");
+      });
+      text.inputEl.addEventListener("keydown", (event) => {
+        if (event.key === "Enter") void submit();
+      });
+      window.setTimeout(() => text.inputEl.focus(), 0);
+    });
+    const actions = contentEl.createDiv({ cls: "fin-sheet-actions" });
+    const cancel = actions.createEl("button", { text: "Cancel" });
+    cancel.addEventListener("click", () => this.close());
+    const save = actions.createEl("button", { cls: "mod-cta", text: this.prompt.submit });
+    save.addEventListener("click", () => void submit());
+  }
+};
+var DeleteCategoryModal = class extends import_obsidian16.Modal {
+  constructor(app, prompt) {
+    super(app);
+    this.prompt = prompt;
+    this.destination = prompt.others.includes(FALLBACK_CATEGORY) ? FALLBACK_CATEGORY : prompt.others[0] ?? FALLBACK_CATEGORY;
+  }
+  onOpen() {
+    const { contentEl } = this;
+    this.modalEl.addClass("fin-sheet");
+    contentEl.empty();
+    contentEl.createEl("h2", { text: `Delete ${this.prompt.category.name}?` });
+    contentEl.createEl("p", {
+      cls: "fin-sheet-note",
+      text: "The note goes to the trash. Nothing is removed from your transactions."
+    });
+    if (this.prompt.held) {
+      new import_obsidian16.Setting(contentEl).setName(`Move ${this.prompt.held} transaction${this.prompt.held === 1 ? "" : "s"} to`).addDropdown((dropdown) => {
+        const options = this.prompt.others.includes(FALLBACK_CATEGORY) ? this.prompt.others : [FALLBACK_CATEGORY, ...this.prompt.others];
+        for (const name of options) dropdown.addOption(name, name);
+        dropdown.setValue(this.destination);
+        dropdown.onChange((value) => {
+          this.destination = value;
+        });
+      });
+    }
+    const actions = contentEl.createDiv({ cls: "fin-sheet-actions" });
+    const cancel = actions.createEl("button", { text: "Cancel" });
+    cancel.addEventListener("click", () => this.close());
+    const confirm = actions.createEl("button", { cls: "mod-warning", text: "Delete" });
+    confirm.addEventListener("click", () => {
+      this.close();
+      void this.prompt.onConfirm(this.destination);
+    });
+  }
+};
+
+// src/ui/tabs/merchants-tab.ts
+var SORTS = [
+  { id: "total", label: "Amount" },
+  { id: "count", label: "Times" },
+  { id: "recent", label: "Recent" },
+  { id: "name", label: "Name" }
+];
+var PAGE_SIZE2 = 60;
+var NEW_CATEGORY = "/new";
+function compare(sort) {
+  if (sort === "count") return (a, b) => b.count - a.count || a.name.localeCompare(b.name);
+  if (sort === "name") return (a, b) => a.name.localeCompare(b.name);
+  if (sort === "recent") {
+    return (a, b) => (b.lastDate ?? "").localeCompare(a.lastDate ?? "") || a.name.localeCompare(b.name);
+  }
+  return (a, b) => b.spent + b.received - (a.spent + a.received) || a.name.localeCompare(b.name);
+}
+var MerchantsTab = class {
+  constructor(plugin) {
+    this.plugin = plugin;
+    this.sort = "total";
+    this.uncategorizedOnly = false;
+    this.shown = PAGE_SIZE2;
+  }
+  resetPaging() {
+    this.shown = PAGE_SIZE2;
+  }
+  render(container) {
+    const filter = this.plugin.store.get();
+    const records = applyFilter(this.plugin.index.transactions(), filter, cairoToday());
+    const all = counterpartySummary(records);
+    const unnamed = records.filter(
+      (record) => !record.counterparty && record.smsMessage
+    ).length;
+    if (!all.length) {
+      renderEmptyState(
+        container,
+        "store",
+        "No names yet",
+        records.length ? "None of these transactions name anyone yet. Try reading the stored messages again, widen the period, or add your bank's wording to merchant_patterns in Budget/Settings/sms_patterns.json." : "No transactions match these filters. Try a different period."
+      );
+      if (unnamed) this.renderFillButton(container, unnamed);
+      return;
+    }
+    const rows = all.filter((item) => !this.uncategorizedOnly || item.categories.includes("Uncategorized")).sort(compare(this.sort));
+    this.renderToolbar(container, all, unnamed);
+    if (!rows.length) {
+      renderEmptyState(
+        container,
+        "check",
+        "Everything is categorised",
+        `All ${all.length} names in ${periodLabel(filter.period)} have a category.`
+      );
+      return;
+    }
+    const categories = new Map(this.plugin.index.categories().map((entry) => [entry.name, entry]));
+    const list = container.createDiv({ cls: "fin-merchant-list" });
+    for (const item of rows.slice(0, this.shown)) this.renderRow(list, item, categories);
+    if (rows.length > this.shown) {
+      const more = list.createEl("button", {
+        cls: "fin-more",
+        text: `Show ${Math.min(PAGE_SIZE2, rows.length - this.shown)} more of ${rows.length}`
+      });
+      more.addEventListener("click", () => {
+        this.shown += PAGE_SIZE2;
+        this.plugin.refreshBudgetView();
+      });
+    }
+  }
+  renderToolbar(container, all, unnamed) {
+    const bar = container.createDiv({ cls: "fin-merchant-bar" });
+    const pending = all.filter((item) => item.categories.includes("Uncategorized")).length;
+    bar.createSpan({
+      cls: "fin-merchant-count",
+      text: `${all.length} name${all.length === 1 ? "" : "s"}` + (pending ? ` \xB7 ${pending} to categorise` : "")
+    });
+    const sorts = bar.createDiv({ cls: "fin-merchant-sorts" });
+    for (const option of SORTS) {
+      const button = sorts.createEl("button", { cls: "fin-chip", text: option.label });
+      button.toggleClass("is-active", this.sort === option.id);
+      button.addEventListener("click", () => {
+        this.sort = option.id;
+        this.resetPaging();
+        this.plugin.refreshBudgetView();
+      });
+    }
+    const toggle = bar.createEl("button", { cls: "fin-chip", text: "Needs a category" });
+    toggle.toggleClass("is-active", this.uncategorizedOnly);
+    toggle.addEventListener("click", () => {
+      this.uncategorizedOnly = !this.uncategorizedOnly;
+      this.resetPaging();
+      this.plugin.refreshBudgetView();
+    });
+    if (unnamed > 0) this.renderFillButton(bar, unnamed);
+  }
+  /**
+   * A transaction parsed before the patterns knew its wording keeps an empty
+   * party key, because a note that reached `parsed` is never parsed again. This
+   * is the way back for those, offered where their absence shows.
+   */
+  renderFillButton(container, unnamed) {
+    const wrapper = container.createDiv({ cls: "fin-merchant-unnamed" });
+    wrapper.createSpan({
+      text: `${unnamed} transaction${unnamed === 1 ? "" : "s"} with a message name nobody. `
+    });
+    const button = wrapper.createEl("button", {
+      cls: "fin-chip",
+      text: "Read their messages again"
+    });
+    button.addEventListener("click", () => {
+      button.disabled = true;
+      void this.plugin.fillMissingCounterparties().then((filled) => {
+        new import_obsidian17.Notice(`Named the other side of ${filled} transaction(s).`, 6e3);
+      }).catch((error) => {
+        new import_obsidian17.Notice(`Could not read the messages: ${error.message}`, 1e4);
+      }).finally(() => {
+        button.disabled = false;
+      });
+    });
+  }
+  renderRow(list, item, categories) {
+    const row = list.createDiv({ cls: "fin-merchant-row" });
+    row.toggleClass("is-pending", item.categories.includes("Uncategorized"));
+    const head = row.createDiv({ cls: "fin-merchant-head" });
+    const name = head.createDiv({ cls: "fin-merchant-name", text: item.name });
+    name.setAttribute("role", "button");
+    name.setAttribute("aria-label", `Show the transactions of ${item.name}`);
+    name.addEventListener("click", () => {
+      this.plugin.store.set({ search: item.name });
+      this.plugin.showTransactionsTab();
+    });
+    const amounts = head.createDiv({ cls: "fin-merchant-amounts" });
+    if (item.spent) {
+      amounts.createSpan({ cls: "fin-out fin-amount", text: `\u2212${formatAmount(item.spent)}` });
+    }
+    if (item.received) {
+      amounts.createSpan({ cls: "fin-in fin-amount", text: `+${formatAmount(item.received)}` });
+    }
+    if (item.currency) amounts.createSpan({ cls: "fin-merchant-currency", text: item.currency });
+    const meta = row.createDiv({ cls: "fin-merchant-meta" });
+    meta.createSpan({
+      text: [
+        item.roles.map((role) => ROLE_LABELS[role]).join(" \xB7 ") || ROLE_LABELS[""],
+        `${item.count} transaction${item.count === 1 ? "" : "s"}`,
+        item.lastDate ? `last ${item.lastDate}` : ""
+      ].filter(Boolean).join(" \xB7 ")
+    });
+    if (item.categories.length > 1) {
+      const chips = row.createDiv({ cls: "fin-merchant-chips" });
+      for (const category of item.categories) {
+        const chip = chips.createSpan({ cls: "fin-merchant-chip", text: category });
+        chip.style.setProperty("--fin-cat-color", categoryColor(category, categories));
+      }
+    }
+    const options = [...categories.keys()].sort((a, b) => a.localeCompare(b));
+    const select = row.createEl("select", { cls: "fin-merchant-select dropdown" });
+    select.setAttribute("aria-label", `Category for ${item.name}`);
+    const placeholder = item.categories.length > 1 ? "Mixed \u2014 choose one" : "Choose a category";
+    select.createEl("option", { value: "", text: placeholder });
+    for (const category of options.length ? options : ["Uncategorized"]) {
+      select.createEl("option", { value: category, text: category });
+    }
+    select.value = item.category && item.category !== "Uncategorized" ? item.category : "";
+    select.createEl("option", { value: NEW_CATEGORY, text: "New category\u2026" });
+    select.addEventListener("change", () => {
+      const chosen = select.value;
+      if (!chosen) return;
+      if (chosen === NEW_CATEGORY) {
+        select.value = "";
+        this.promptForCategory(item, [...categories.keys()]);
+        return;
+      }
+      select.disabled = true;
+      void this.assign(item, chosen).finally(() => {
+        select.disabled = false;
+      });
+    });
+    const open = row.createEl("button", {
+      cls: "fin-merchant-open",
+      attr: { "aria-label": `Show the transactions of ${item.name}` }
+    });
+    (0, import_obsidian17.setIcon)(open, "chevron-right");
+    open.addEventListener("click", () => {
+      this.plugin.store.set({ search: item.name });
+      this.plugin.showTransactionsTab();
+    });
+  }
+  /**
+   * Naming a category you do not have yet is the common case here: the list is
+   * where you find out you need one. Creating it files the party in the same
+   * step, so the answer you had in mind lands without a detour through the
+   * category editor.
+   */
+  promptForCategory(item, taken) {
+    new CategoryNameModal(this.plugin.app, {
+      title: `New category for ${item.name}`,
+      submit: "Create and file",
+      value: "",
+      taken,
+      onSubmit: async (name) => {
+        try {
+          await this.plugin.createCategory(name);
+        } catch (error) {
+          new import_obsidian17.Notice(`Could not create the category: ${error.message}`, 1e4);
+          return;
+        }
+        await this.assign(item, name);
+      }
+    }).open();
+  }
+  /**
+   * Files every transaction of one party and teaches the parser the name, in
+   * that order: the notes are the record, and the rule only affects what has
+   * not arrived yet. A failure part-way through still reports what it managed.
+   */
+  async assign(item, category) {
+    let filed = 0;
+    try {
+      for (const path of item.paths) {
+        await setCategory(this.plugin.app, path, category);
+        filed += 1;
+      }
+      const rules = await loadCategoryRules(this.plugin.app);
+      await saveCategoryRules(this.plugin.app, withKeyword(rules, category, item.name));
+      new import_obsidian17.Notice(
+        `Filed ${filed} transaction${filed === 1 ? "" : "s"} of ${item.name} under ${category}, and future messages that mention it too.`,
+        6e3
+      );
+    } catch (error) {
+      new import_obsidian17.Notice(
+        `Filed ${filed} of ${item.paths.length} transactions before failing: ${error.message}`,
+        1e4
+      );
+    }
+  }
+};
+
 // src/ui/tabs/stats-tab.ts
-var import_obsidian15 = require("obsidian");
+var import_obsidian18 = require("obsidian");
 
 // src/domain/budgets.ts
 var WARN_AT = 0.8;
@@ -2666,9 +3598,9 @@ var StatsTab = class {
     exportButton.addEventListener("click", async () => {
       try {
         const path = await exportCsv(this.plugin.app, records, periodLabel(filter.period));
-        new import_obsidian15.Notice(`Exported ${records.length} transactions to ${path}.`);
+        new import_obsidian18.Notice(`Exported ${records.length} transactions to ${path}.`);
       } catch (error) {
-        new import_obsidian15.Notice(`Export failed: ${error.message}`);
+        new import_obsidian18.Notice(`Export failed: ${error.message}`);
       }
     });
   }
@@ -2763,7 +3695,7 @@ var StatsTab = class {
     if (!progress.length) {
       body.createEl("p", {
         cls: "fin-panel-empty",
-        text: "No budgets set. Open a category from the Stats tab to set one."
+        text: "No budgets set yet. Give a category a monthly budget and it appears here."
       });
       this.renderCategoryEditorButton(body);
       return;
@@ -2836,10 +3768,11 @@ var StatsTab = class {
 var BUDGET_VIEW_TYPE = "finance-budget-view";
 var TABS = [
   { id: "transactions", label: "Transactions" },
+  { id: "merchants", label: "Merchants" },
   { id: "accounts", label: "Accounts" },
   { id: "stats", label: "Stats" }
 ];
-var BudgetView = class extends import_obsidian16.ItemView {
+var BudgetView = class extends import_obsidian19.ItemView {
   constructor(leaf, plugin) {
     super(leaf);
     this.activeTab = "transactions";
@@ -2861,6 +3794,7 @@ var BudgetView = class extends import_obsidian16.ItemView {
     root.empty();
     root.addClass("finance-budget");
     this.transactionsTab = new TransactionsTab(this.plugin);
+    this.merchantsTab = new MerchantsTab(this.plugin);
     this.accountsTab = new AccountsTab(this.plugin);
     this.statsTab = new StatsTab(this.plugin);
     this.tabBarEl = root.createDiv({ cls: "fin-tabs" });
@@ -2872,6 +3806,7 @@ var BudgetView = class extends import_obsidian16.ItemView {
     this.unsubscribe.push(this.plugin.store.subscribe(() => {
       void this.plugin.persistFilter();
       this.transactionsTab.resetPaging();
+      this.merchantsTab.resetPaging();
       this.renderActiveTab();
     }));
   }
@@ -2908,12 +3843,16 @@ var BudgetView = class extends import_obsidian16.ItemView {
     this.filterBar.render(this.headerEl);
     this.bodyEl.empty();
     if (this.activeTab === "transactions") this.renderTransactions();
+    else if (this.activeTab === "merchants") this.renderMerchants();
     else if (this.activeTab === "accounts") this.renderAccounts();
     else this.renderStats();
   }
   // Filled in by Task 6 (transactions) and Plan C (accounts, stats).
   renderTransactions() {
     this.transactionsTab.render(this.bodyEl);
+  }
+  renderMerchants() {
+    this.merchantsTab.render(this.bodyEl);
   }
   renderAccounts() {
     this.accountsTab.render(this.bodyEl);
@@ -2924,8 +3863,8 @@ var BudgetView = class extends import_obsidian16.ItemView {
 };
 
 // src/ui/components/add-transaction-modal.ts
-var import_obsidian17 = require("obsidian");
-var AddTransactionModal = class extends import_obsidian17.Modal {
+var import_obsidian20 = require("obsidian");
+var AddTransactionModal = class extends import_obsidian20.Modal {
   constructor(app, plugin) {
     super(app);
     this.plugin = plugin;
@@ -2938,7 +3877,7 @@ var AddTransactionModal = class extends import_obsidian17.Modal {
       account: "",
       toAccount: "",
       category: "Uncategorized",
-      merchant: "",
+      counterparty: "",
       note: ""
     };
   }
@@ -2951,7 +3890,7 @@ var AddTransactionModal = class extends import_obsidian17.Modal {
     const categories = this.plugin.index.categories().map((category) => category.name).sort();
     this.draft.account = accounts[0] ?? "";
     this.draft.currency = this.plugin.index.accounts()[0]?.currency ?? "EGP";
-    new import_obsidian17.Setting(contentEl).setName("Amount").addText((text) => {
+    new import_obsidian20.Setting(contentEl).setName("Amount").addText((text) => {
       text.inputEl.type = "number";
       text.inputEl.inputMode = "decimal";
       text.inputEl.focus();
@@ -2963,7 +3902,7 @@ var AddTransactionModal = class extends import_obsidian17.Modal {
         this.draft.currency = value;
       })
     );
-    new import_obsidian17.Setting(contentEl).setName("Type").addDropdown((dropdown) => {
+    new import_obsidian20.Setting(contentEl).setName("Type").addDropdown((dropdown) => {
       dropdown.addOption("debit", "Spending");
       dropdown.addOption("credit", "Income");
       dropdown.addOption("transfer", "Transfer");
@@ -2971,9 +3910,10 @@ var AddTransactionModal = class extends import_obsidian17.Modal {
       dropdown.setValue(this.draft.type).onChange((value) => {
         this.draft.type = value;
         toAccountSetting.settingEl.toggleClass("is-hidden", value !== "transfer");
+        partySetting.setName(ROLE_LABELS[roleForType(this.draft.type)]);
       });
     });
-    new import_obsidian17.Setting(contentEl).setName("Account").addDropdown((dropdown) => {
+    new import_obsidian20.Setting(contentEl).setName("Account").addDropdown((dropdown) => {
       const options = accounts.length ? accounts : ["Cash"];
       for (const name of options) dropdown.addOption(name, name);
       this.draft.account = this.draft.account || options[0];
@@ -2981,7 +3921,7 @@ var AddTransactionModal = class extends import_obsidian17.Modal {
         this.draft.account = value;
       });
     });
-    const toAccountSetting = new import_obsidian17.Setting(contentEl).setName("To account").addDropdown((dropdown) => {
+    const toAccountSetting = new import_obsidian20.Setting(contentEl).setName("To account").addDropdown((dropdown) => {
       dropdown.addOption("", "\u2014");
       for (const name of accounts) dropdown.addOption(name, name);
       dropdown.setValue(this.draft.toAccount).onChange((value) => {
@@ -2989,19 +3929,19 @@ var AddTransactionModal = class extends import_obsidian17.Modal {
       });
     });
     toAccountSetting.settingEl.toggleClass("is-hidden", this.draft.type !== "transfer");
-    new import_obsidian17.Setting(contentEl).setName("Category").addDropdown((dropdown) => {
+    new import_obsidian20.Setting(contentEl).setName("Category").addDropdown((dropdown) => {
       const options = categories.length ? categories : ["Uncategorized"];
       for (const name of options) dropdown.addOption(name, name);
       dropdown.setValue(options.includes(this.draft.category) ? this.draft.category : options[0]).onChange((value) => {
         this.draft.category = value;
       });
     });
-    new import_obsidian17.Setting(contentEl).setName("Merchant").addText(
-      (text) => text.setPlaceholder("Where did it go?").setValue(this.draft.merchant).onChange((value) => {
-        this.draft.merchant = value;
+    const partySetting = new import_obsidian20.Setting(contentEl).setName(ROLE_LABELS[roleForType(this.draft.type)]).addText(
+      (text) => text.setPlaceholder("Who was on the other side?").setValue(this.draft.counterparty).onChange((value) => {
+        this.draft.counterparty = value;
       })
     );
-    new import_obsidian17.Setting(contentEl).setName("Date").addText((text) => {
+    new import_obsidian20.Setting(contentEl).setName("Date").addText((text) => {
       text.inputEl.type = "date";
       text.setValue(this.draft.date).onChange((value) => {
         this.draft.date = value;
@@ -3012,7 +3952,7 @@ var AddTransactionModal = class extends import_obsidian17.Modal {
         this.draft.time = value;
       });
     });
-    new import_obsidian17.Setting(contentEl).setName("Note").addTextArea(
+    new import_obsidian20.Setting(contentEl).setName("Note").addTextArea(
       (text) => text.setValue(this.draft.note).onChange((value) => {
         this.draft.note = value;
       })
@@ -3026,11 +3966,11 @@ var AddTransactionModal = class extends import_obsidian17.Modal {
   async save() {
     const amount = Number(this.draft.amount.replaceAll(",", ""));
     if (!Number.isFinite(amount) || amount === 0) {
-      new import_obsidian17.Notice("Enter an amount.");
+      new import_obsidian20.Notice("Enter an amount.");
       return;
     }
     if (!this.draft.account) {
-      new import_obsidian17.Notice("Choose an account.");
+      new import_obsidian20.Notice("Choose an account.");
       return;
     }
     const isCredit = this.draft.type === "credit";
@@ -3042,134 +3982,27 @@ var AddTransactionModal = class extends import_obsidian17.Modal {
         fromAccount: isCredit ? "" : this.draft.account,
         toAccount: isCredit ? this.draft.account : this.draft.toAccount,
         category: this.draft.category,
-        merchant: this.draft.merchant,
+        counterparty: this.draft.counterparty,
         type: this.draft.type,
         note: this.draft.note
       });
-      new import_obsidian17.Notice(`Added ${file.basename}.`);
+      new import_obsidian20.Notice(`Added ${file.basename}.`);
       this.close();
     } catch (error) {
-      new import_obsidian17.Notice(`Could not add the transaction: ${error.message}`);
+      new import_obsidian20.Notice(`Could not add the transaction: ${error.message}`);
     }
-  }
-};
-
-// src/ui/components/category-editor.ts
-var import_obsidian18 = require("obsidian");
-var ICON_CHOICES = [
-  "shopping-cart",
-  "utensils",
-  "car",
-  "receipt",
-  "shopping-bag",
-  "heart-pulse",
-  "trending-up",
-  "percent",
-  "arrow-left-right",
-  "home",
-  "plane",
-  "gift",
-  "smartphone",
-  "graduation-cap",
-  "dumbbell",
-  "circle-dashed"
-];
-var CategoryEditorModal = class extends import_obsidian18.Modal {
-  constructor(app, plugin) {
-    super(app);
-    this.plugin = plugin;
-  }
-  onOpen() {
-    this.modalEl.addClass("fin-sheet");
-    this.draw();
-  }
-  draw() {
-    const { contentEl } = this;
-    contentEl.empty();
-    contentEl.createEl("h2", { text: "Categories and budgets" });
-    const categories = [...this.plugin.index.categories()].sort((a, b) => a.name.localeCompare(b.name));
-    if (!categories.length) {
-      contentEl.createEl("p", {
-        text: "No category notes found. Add notes with `type: category` under Budget/Settings/Categories/."
-      });
-      return;
-    }
-    for (const category of categories) this.renderRow(contentEl, category);
-  }
-  renderRow(container, category) {
-    const map = /* @__PURE__ */ new Map([[category.name, category]]);
-    const row = container.createDiv({ cls: "fin-category-row" });
-    const glyph = row.createDiv({ cls: "fin-category-glyph" });
-    const paintGlyph = (color, icon) => {
-      glyph.empty();
-      glyph.style.setProperty("--fin-cat-color", color);
-      (0, import_obsidian18.setIcon)(glyph, icon);
-    };
-    paintGlyph(categoryColor(category.name, map), categoryIcon(category.name, map));
-    const body = row.createDiv({ cls: "fin-category-body" });
-    body.createDiv({ cls: "fin-category-name", text: category.name });
-    const swatches = body.createDiv({ cls: "fin-swatches" });
-    for (const color of CATEGORY_PALETTE) {
-      const swatch = swatches.createEl("button", { cls: "fin-swatch", attr: { "aria-label": `Colour ${color}` } });
-      swatch.style.background = color;
-      swatch.toggleClass("is-active", category.color === color);
-      swatch.addEventListener("click", async () => {
-        try {
-          await updateCategoryNote(this.app, category.path, { color });
-          category.color = color;
-          swatches.querySelectorAll(".fin-swatch").forEach((other) => other.removeClass("is-active"));
-          swatch.addClass("is-active");
-          paintGlyph(color, categoryIcon(category.name, map));
-        } catch (error) {
-          new import_obsidian18.Notice(`Could not save the colour: ${error.message}`);
-        }
-      });
-    }
-    new import_obsidian18.Setting(body).setName("Icon").addDropdown((dropdown) => {
-      for (const icon of ICON_CHOICES) dropdown.addOption(icon, icon);
-      dropdown.setValue(category.icon ?? categoryIcon(category.name, map));
-      dropdown.onChange(async (value) => {
-        try {
-          await updateCategoryNote(this.app, category.path, { icon: value });
-          category.icon = value;
-          paintGlyph(categoryColor(category.name, map), value);
-        } catch (error) {
-          new import_obsidian18.Notice(`Could not save the icon: ${error.message}`);
-        }
-      });
-    });
-    new import_obsidian18.Setting(body).setName("Monthly budget").setDesc(category.currency).addText((text) => {
-      text.inputEl.type = "number";
-      text.inputEl.inputMode = "decimal";
-      text.setPlaceholder("none");
-      text.setValue(category.monthlyBudget === null ? "" : String(category.monthlyBudget));
-      text.inputEl.addEventListener("change", async () => {
-        const raw = text.inputEl.value.trim();
-        const parsed = raw === "" ? null : Number(raw.replaceAll(",", ""));
-        if (parsed !== null && !Number.isFinite(parsed)) {
-          new import_obsidian18.Notice("That budget is not a number.");
-          return;
-        }
-        try {
-          await updateCategoryNote(this.app, category.path, { monthly_budget: parsed });
-          category.monthlyBudget = parsed;
-        } catch (error) {
-          new import_obsidian18.Notice(`Could not save the budget: ${error.message}`);
-        }
-      });
-    });
   }
 };
 
 // src/ui/components/transaction-sheet.ts
-var import_obsidian19 = require("obsidian");
+var import_obsidian21 = require("obsidian");
 var TYPE_CHOICES = {
   debit: "Spending",
   credit: "Income",
   transfer: "Transfer",
   fee: "Fee"
 };
-var TransactionSheet = class extends import_obsidian19.Modal {
+var TransactionSheet = class extends import_obsidian21.Modal {
   constructor(app, plugin, record) {
     super(app);
     this.plugin = plugin;
@@ -3182,7 +4015,7 @@ var TransactionSheet = class extends import_obsidian19.Modal {
       fromAccount: record.fromAccount,
       toAccount: record.toAccount,
       category: record.category,
-      merchant: record.merchant,
+      counterparty: record.counterparty,
       type: record.type,
       excluded: record.excluded,
       excludeReason: record.excludeReason
@@ -3193,11 +4026,11 @@ var TransactionSheet = class extends import_obsidian19.Modal {
     modalEl.addClass("fin-sheet");
     contentEl.empty();
     contentEl.createEl("h2", {
-      text: this.record.merchant || this.record.category || "Transaction"
+      text: this.record.counterparty || this.record.category || "Transaction"
     });
     const accounts = this.plugin.index.accounts().map((account) => account.name).sort();
     const categories = this.plugin.index.categories().map((category) => category.name).sort();
-    new import_obsidian19.Setting(contentEl).setName("Amount").addText(
+    new import_obsidian21.Setting(contentEl).setName("Amount").addText(
       (text) => text.setValue(this.draft.amount).onChange((value) => {
         this.draft.amount = value;
       })
@@ -3206,7 +4039,7 @@ var TransactionSheet = class extends import_obsidian19.Modal {
         this.draft.currency = value;
       })
     );
-    new import_obsidian19.Setting(contentEl).setName("Date").addText((text) => {
+    new import_obsidian21.Setting(contentEl).setName("Date").addText((text) => {
       text.inputEl.type = "date";
       text.setValue(this.draft.date).onChange((value) => {
         this.draft.date = value;
@@ -3217,14 +4050,15 @@ var TransactionSheet = class extends import_obsidian19.Modal {
         this.draft.time = value;
       });
     });
-    new import_obsidian19.Setting(contentEl).setName("Type").addDropdown((dropdown) => {
+    new import_obsidian21.Setting(contentEl).setName("Type").addDropdown((dropdown) => {
       dropdown.addOption("", "Unknown");
       for (const [value, label] of Object.entries(TYPE_CHOICES)) dropdown.addOption(value, label);
       dropdown.setValue(this.draft.type).onChange((value) => {
         this.draft.type = value;
+        partySetting.setName(ROLE_LABELS[roleForType(this.draft.type)]);
       });
     });
-    new import_obsidian19.Setting(contentEl).setName("Category").addDropdown((dropdown) => {
+    new import_obsidian21.Setting(contentEl).setName("Category").addDropdown((dropdown) => {
       const options = categories.length ? categories : ["Uncategorized"];
       if (!options.includes(this.draft.category)) options.unshift(this.draft.category);
       for (const name of options) dropdown.addOption(name, name);
@@ -3234,18 +4068,18 @@ var TransactionSheet = class extends import_obsidian19.Modal {
     });
     this.accountSetting(contentEl, "From account", accounts, "fromAccount");
     this.accountSetting(contentEl, "To account", accounts, "toAccount");
-    new import_obsidian19.Setting(contentEl).setName("Merchant").addText(
-      (text) => text.setValue(this.draft.merchant).onChange((value) => {
-        this.draft.merchant = value;
+    const partySetting = new import_obsidian21.Setting(contentEl).setName(ROLE_LABELS[roleForType(this.draft.type)]).addText(
+      (text) => text.setValue(this.draft.counterparty).onChange((value) => {
+        this.draft.counterparty = value;
       })
     );
-    new import_obsidian19.Setting(contentEl).setName("Exclude from calculations").setDesc("The transaction stays in the list but counts towards nothing.").addToggle(
+    new import_obsidian21.Setting(contentEl).setName("Exclude from calculations").setDesc("The transaction stays in the list but counts towards nothing.").addToggle(
       (toggle) => toggle.setValue(this.draft.excluded).onChange((value) => {
         this.draft.excluded = value;
         reasonSetting.settingEl.toggleClass("is-hidden", !value);
       })
     );
-    const reasonSetting = new import_obsidian19.Setting(contentEl).setName("Reason").addText(
+    const reasonSetting = new import_obsidian21.Setting(contentEl).setName("Reason").addText(
       (text) => text.setPlaceholder("Did not happen").setValue(this.draft.excludeReason).onChange((value) => {
         this.draft.excludeReason = value;
       })
@@ -3277,7 +4111,7 @@ var TransactionSheet = class extends import_obsidian19.Modal {
     save.addEventListener("click", () => void this.save());
   }
   accountSetting(container, label, accounts, field) {
-    new import_obsidian19.Setting(container).setName(label).addDropdown((dropdown) => {
+    new import_obsidian21.Setting(container).setName(label).addDropdown((dropdown) => {
       dropdown.addOption("", "\u2014");
       const options = [...accounts];
       const current = this.draft[field];
@@ -3291,7 +4125,7 @@ var TransactionSheet = class extends import_obsidian19.Modal {
   async save() {
     const amount = this.draft.amount.trim() === "" ? null : Number(this.draft.amount.replaceAll(",", ""));
     if (amount !== null && !Number.isFinite(amount)) {
-      new import_obsidian19.Notice("That amount is not a number.");
+      new import_obsidian21.Notice("That amount is not a number.");
       return;
     }
     const time = this.draft.time || "00:00";
@@ -3304,7 +4138,7 @@ var TransactionSheet = class extends import_obsidian19.Modal {
         from_account: this.draft.fromAccount,
         to_account: this.draft.toAccount,
         category: this.draft.category,
-        merchant: this.draft.merchant,
+        ...counterpartyFields(this.draft.counterparty, roleForType(this.draft.type)),
         transaction_type: this.draft.type,
         excluded: this.draft.excluded ? true : null,
         exclude_reason: this.draft.excluded ? this.draft.excludeReason || "Excluded by hand" : null,
@@ -3314,14 +4148,14 @@ var TransactionSheet = class extends import_obsidian19.Modal {
       });
       this.close();
     } catch (error) {
-      new import_obsidian19.Notice(`Could not save: ${error.message}`);
+      new import_obsidian21.Notice(`Could not save: ${error.message}`);
     }
   }
 };
 
 // src/main.ts
 var SMS_PATTERNS_PATH = `${SETTINGS_DIR}/sms_patterns.json`;
-var FinanceAutomationPlugin = class extends import_obsidian20.Plugin {
+var FinanceAutomationPlugin = class extends import_obsidian22.Plugin {
   constructor() {
     super(...arguments);
     this.settings = { ...DEFAULT_SETTINGS };
@@ -3370,7 +4204,7 @@ var FinanceAutomationPlugin = class extends import_obsidian20.Plugin {
       callback: async () => {
         const captured = await this.captureInbox();
         if (captured) void this.runFinance(false);
-        else new import_obsidian20.Notice(`Finance: no messages waiting in ${INBOX_DIR}.`);
+        else new import_obsidian22.Notice(`Finance: no messages waiting in ${INBOX_DIR}.`);
       }
     });
     this.addCommand({
@@ -3384,8 +4218,21 @@ var FinanceAutomationPlugin = class extends import_obsidian20.Plugin {
       callback: async () => {
         const records = applyFilter(this.index.transactions(), this.store.get(), cairoToday());
         const path = await exportCsv(this.app, records, periodLabel(this.store.get().period));
-        new import_obsidian20.Notice(`Exported ${records.length} transactions to ${path}.`);
+        new import_obsidian22.Notice(`Exported ${records.length} transactions to ${path}.`);
       }
+    });
+    this.addCommand({
+      id: "fill-counterparties",
+      name: "Fill in missing merchants from stored messages",
+      callback: async () => {
+        const updated = await this.fillMissingCounterparties();
+        new import_obsidian22.Notice(`Finance: named the other side of ${updated} transaction(s).`, 6e3);
+      }
+    });
+    this.addCommand({
+      id: "list-merchants",
+      name: "List merchants, recipients and senders",
+      callback: () => void this.activateBudgetView().then(() => this.showBudgetTab("merchants"))
     });
     this.addCommand({
       id: "edit-categories",
@@ -3402,7 +4249,7 @@ var FinanceAutomationPlugin = class extends import_obsidian20.Plugin {
       name: "Apply exclusion rules to all transactions",
       callback: async () => {
         const updated = await this.applyRulesToAll();
-        new import_obsidian20.Notice(`Finance: updated ${updated} transaction(s).`);
+        new import_obsidian22.Notice(`Finance: updated ${updated} transaction(s).`);
       }
     });
     this.addSettingTab(new FinanceAutomationSettingTab(this.app, this));
@@ -3452,11 +4299,14 @@ var FinanceAutomationPlugin = class extends import_obsidian20.Plugin {
       if (view instanceof BudgetView) view.renderActiveTab();
     }
   }
-  showTransactionsTab() {
+  showBudgetTab(tab) {
     for (const leaf of this.app.workspace.getLeavesOfType(BUDGET_VIEW_TYPE)) {
       const view = leaf.view;
-      if (view instanceof BudgetView) view.showTab("transactions");
+      if (view instanceof BudgetView) view.showTab(tab);
     }
+  }
+  showTransactionsTab() {
+    this.showBudgetTab("transactions");
   }
   openTransactionSheet(record) {
     new TransactionSheet(this.app, this, record).open();
@@ -3474,10 +4324,10 @@ var FinanceAutomationPlugin = class extends import_obsidian20.Plugin {
   async handleCaptureLink(kind, params) {
     try {
       const file = kind === "sms" ? await createRawSmsTransaction(this.app, params, await this.loadPatterns()) : await createStructuredTransaction(this.app, params);
-      new import_obsidian20.Notice(`Finance: captured ${file.path}.`, 5e3);
+      new import_obsidian22.Notice(`Finance: captured ${file.path}.`, 5e3);
     } catch (error) {
       console.error("Finance capture link failed", error);
-      new import_obsidian20.Notice(`Finance capture failed: ${error.message}`, 1e4);
+      new import_obsidian22.Notice(`Finance capture failed: ${error.message}`, 1e4);
     }
   }
   /**
@@ -3493,12 +4343,17 @@ var FinanceAutomationPlugin = class extends import_obsidian20.Plugin {
       console.error("Finance inbox capture failed", failure.path, failure.error);
     }
     const summary = describeInbox(inbox);
-    if (summary) new import_obsidian20.Notice(`Finance: ${summary}.`, 6e3);
+    if (summary) new import_obsidian22.Notice(`Finance: ${summary}.`, 6e3);
     for (const path of inbox.created) this.index.refreshPath(path);
     return inbox.created.length;
   }
+  /**
+   * The vault's patterns, topped up with the built-in ones for the party a
+   * message names. The vault's own entries are tried first, so nothing written
+   * by hand is overruled.
+   */
   async loadPatterns() {
-    return loadVaultJson(this.app, SMS_PATTERNS_PATH, {});
+    return withDefaultPatterns(await loadVaultJson(this.app, SMS_PATTERNS_PATH, {}));
   }
   queueAutomaticRun() {
     if (this.running) {
@@ -3521,21 +4376,21 @@ var FinanceAutomationPlugin = class extends import_obsidian20.Plugin {
   async runFinance(showNotice) {
     if (this.running) {
       this.queued = true;
-      if (showNotice) new import_obsidian20.Notice("Finance processing is already running; another pass is queued.");
+      if (showNotice) new import_obsidian22.Notice("Finance processing is already running; another pass is queued.");
       return;
     }
     this.running = true;
     this.setStatus("running\u2026");
-    if (showNotice) new import_obsidian20.Notice("Finance: processing\u2026");
+    if (showNotice) new import_obsidian22.Notice("Finance: processing\u2026");
     try {
       if (await this.captureInbox()) this.queued = true;
       const updated = await this.processPending();
       this.setStatus("ready");
-      if (showNotice) new import_obsidian20.Notice(`Finance: updated ${updated} transaction(s).`, 6e3);
+      if (showNotice) new import_obsidian22.Notice(`Finance: updated ${updated} transaction(s).`, 6e3);
     } catch (error) {
       this.setStatus("error");
       console.error("Finance automation failed", error);
-      new import_obsidian20.Notice(`Finance automation failed: ${error.message}`, 1e4);
+      new import_obsidian22.Notice(`Finance automation failed: ${error.message}`, 1e4);
     } finally {
       this.running = false;
       if (this.queued) {
@@ -3544,13 +4399,50 @@ var FinanceAutomationPlugin = class extends import_obsidian20.Plugin {
       }
     }
   }
-  async processPending() {
-    const [config, patterns, accounts, categories] = await Promise.all([
+  /** Everything the parser reads, gathered the same way for every caller. */
+  async loadParserInputs() {
+    const [config, patterns, accountsJson, categories] = await Promise.all([
       loadVaultJson(this.app, CONFIG_PATH, { default_currency: "EGP" }),
       this.loadPatterns(),
       loadVaultJson(this.app, ACCOUNTS_JSON_PATH, { accounts: [] }),
       loadVaultJson(this.app, CATEGORY_RULES_PATH, { rules: [] })
     ]);
+    return {
+      config,
+      patterns,
+      accounts: mergeAccountSources(this.index.accounts(), accountsJson),
+      categories
+    };
+  }
+  /**
+   * Reads the merchant, recipient or sender out of the stored message of every
+   * transaction that names nobody yet.
+   *
+   * A note that reached `parsed` is never parsed again, so transactions filed
+   * before the parser learned a wording keep their empty party key forever.
+   * This is the catch-up pass, and it only ever fills a blank: a name already
+   * in the note, typed or parsed, is left exactly as it is.
+   */
+  async fillMissingCounterparties() {
+    const { config, patterns, accounts, categories } = await this.loadParserInputs();
+    let updated = 0;
+    for (const record of this.index.transactions()) {
+      if (record.counterparty || !record.smsMessage) continue;
+      const parsed = parseSms(record.smsMessage, record.timestamp, config, patterns, accounts, categories);
+      const { counterparty, counterpartyRole } = readCounterparty(parsed);
+      if (!counterparty) continue;
+      this.ignoreWatchUntil.set(record.path, Date.now() + 2e3);
+      await updateTransaction(
+        this.app,
+        record.path,
+        counterpartyFields(counterparty, counterpartyRole)
+      );
+      updated += 1;
+    }
+    return updated;
+  }
+  async processPending() {
+    const { config, patterns, accounts, categories } = await this.loadParserInputs();
     const { rules } = await loadRules(this.app);
     let updated = 0;
     for (const record of this.index.transactions()) {
@@ -3570,6 +4462,38 @@ var FinanceAutomationPlugin = class extends import_obsidian20.Plugin {
       updated += 1;
     }
     return updated;
+  }
+  /**
+   * Writes a new category note and answers with its path. It borrows the
+   * currency of the categories already there, since a vault that budgets in one
+   * currency almost never gains a second.
+   */
+  async createCategory(name) {
+    const currency = this.index.categories()[0]?.currency ?? "EGP";
+    const path = await createCategoryNote(this.app, {
+      name,
+      currency,
+      color: null,
+      icon: null,
+      monthlyBudget: null
+    });
+    this.index.refreshPath(path);
+    return path;
+  }
+  /**
+   * Files every transaction of one category under another, and answers with how
+   * many moved. The writes are hidden from the watcher: re-filing a transaction
+   * changes nothing the parser would want to look at again.
+   */
+  async recategorize(from, to) {
+    let moved = 0;
+    for (const record of this.index.transactions()) {
+      if (record.category !== from) continue;
+      this.ignoreWatchUntil.set(record.path, Date.now() + 2e3);
+      await updateTransaction(this.app, record.path, { category: to });
+      moved += 1;
+    }
+    return moved;
   }
   async applyRulesToAll() {
     const { rules } = await loadRules(this.app);

@@ -2,6 +2,7 @@ import { Modal, Notice, Setting } from "obsidian";
 import type { App } from "obsidian";
 import { createManualTransaction } from "../../data/create.ts";
 import { cairoToday } from "../../domain/dates.ts";
+import { ROLE_LABELS, roleForType } from "../../domain/counterparty.ts";
 import type FinanceAutomationPlugin from "../../main.ts";
 import type { TransactionType } from "../../data/types.ts";
 
@@ -15,7 +16,7 @@ export class AddTransactionModal extends Modal {
     account: "",
     toAccount: "",
     category: "Uncategorized",
-    merchant: "",
+    counterparty: "",
     note: "",
   };
 
@@ -51,6 +52,9 @@ export class AddTransactionModal extends Modal {
       dropdown.setValue(this.draft.type).onChange((value) => {
         this.draft.type = value as TransactionType;
         toAccountSetting.settingEl.toggleClass("is-hidden", value !== "transfer");
+        // A shop, a person you paid, and whoever paid you are the same box with
+        // three names; the type in hand decides which one it wears.
+        partySetting.setName(ROLE_LABELS[roleForType(this.draft.type)]);
       });
     });
 
@@ -78,10 +82,12 @@ export class AddTransactionModal extends Modal {
         .onChange((value) => { this.draft.category = value; });
     });
 
-    new Setting(contentEl).setName("Merchant").addText((text) =>
-      text.setPlaceholder("Where did it go?").setValue(this.draft.merchant)
-        .onChange((value) => { this.draft.merchant = value; }),
-    );
+    const partySetting = new Setting(contentEl)
+      .setName(ROLE_LABELS[roleForType(this.draft.type)])
+      .addText((text) =>
+        text.setPlaceholder("Who was on the other side?").setValue(this.draft.counterparty)
+          .onChange((value) => { this.draft.counterparty = value; }),
+      );
 
     new Setting(contentEl).setName("Date").addText((text) => {
       text.inputEl.type = "date";
@@ -122,7 +128,7 @@ export class AddTransactionModal extends Modal {
         fromAccount: isCredit ? "" : this.draft.account,
         toAccount: isCredit ? this.draft.account : this.draft.toAccount,
         category: this.draft.category,
-        merchant: this.draft.merchant,
+        counterparty: this.draft.counterparty,
         type: this.draft.type,
         note: this.draft.note,
       });

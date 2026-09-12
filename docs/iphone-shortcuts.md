@@ -104,14 +104,29 @@ fills in the rest from the text alone, using
 | Field | Read from the message by |
 |---|---|
 | `amount`, `currency` | `amount_patterns`, falling back to `default_currency` in `config.json` |
-| `from_account` / `to_account` | `card_ending_patterns` — the account or card number in the message, looked up in `card_endings` in `accounts.json` |
+| `from_account` / `to_account` | `card_ending_patterns` — the account or card number in the message, looked up in `card_endings` on the account notes in `Budget/Accounts/` |
 | `transaction_type` | the `debit`, `credit`, `transfer`, and `fee` keyword lists |
-| `merchant` | `merchant_patterns` |
+| `merchant`, `recipient` or `sender` | `merchant_patterns`, `recipient_patterns`, `sender_patterns` — whichever the type calls for, plus the built-in patterns |
 | `category` | the keyword rules in `Budget/Settings/Categories/` |
 | `timestamp` | the date in the message when it carries one, otherwise the moment the link opened |
 
-The account number is the hinge: give each account its digits in
-`Budget/Settings/accounts.json` and every message from that card files itself.
+The account number is the hinge: list every digit group a bank uses for an account under
+`card_endings` on its note in `Budget/Accounts/` and each message from that card files
+itself. One account often has several — a debit card, a credit card, and the account
+number all belong to the same note:
+
+```yaml
+name: "CIB"
+card_endings:
+  - "0779"
+  - "1934"
+aliases:
+  - "cib"
+```
+
+`Budget/Settings/accounts.json` holds the same shape and still works for an account with
+no note yet. Both sources are merged by name, so an ending listed in either one resolves
+to the account.
 
 ```json
 {
@@ -123,6 +138,7 @@ The account number is the hinge: give each account its digits in
 ```
 
 An account also matches when its name or one of its `aliases` appears in the message.
+
 When nothing matches, the transaction is filed under `Card ••••1234`, so the number is
 never lost.
 
@@ -130,6 +146,37 @@ The note becomes `status: parsed` once it has an amount, a currency, a type, and
 account. Anything less becomes `status: needs_review` — never dropped. Add the missing
 pattern, alias, or card ending, then run **Process pending SMS transactions** from the
 command palette.
+
+### Who was on the other side
+
+A note names the party under the key that says what it was, and only one of the three:
+
+| Type | Key | What it holds |
+|---|---|---|
+| `debit`, `fee` | `merchant` | the shop or the biller |
+| `transfer` | `recipient` | whoever the money went to |
+| `credit` | `sender` | whoever the money came from |
+
+Those come from `merchant_patterns`, `recipient_patterns` and `sender_patterns`, each of
+which captures the name in a group called `name` (or the first unnamed group):
+
+```json
+{
+  "merchant_patterns": [
+    "(?i)(?:at|merchant)\\s+(?P<name>[A-Za-z0-9][A-Za-z0-9 .&'/_-]{1,60}?)(?=\\s+(?:on|using|balance)\\b|[.;,]|$)"
+  ],
+  "recipient_patterns": ["(?i)(?:إلى|الى|لحساب)\\s+(?P<name>[^.;,\\n]{2,60}?)(?=\\s+(?:في|الرصيد)|[.;,]|$)"]
+}
+```
+
+A built-in set covering the common English and Arabic wordings runs after whatever the
+file holds, so most banks need nothing here; a pattern of your own is always tried first.
+The Arabic ones deliberately skip `من بطاقة` and `من حساب` — "from the card", "from the
+account" — so the card a purchase left is never mistaken for a sender.
+
+The names all appear together on the **Merchants** tab of the Budget view, where choosing
+a category files every transaction of that name and teaches the keyword rules to file the
+next one on its own.
 
 ### What arrives, and what the note shows
 
@@ -171,7 +218,7 @@ obsidian://finance-transaction?amount=⟨Amount⟩&currency=⟨Currency⟩&accou
 3. Add **Choose from Menu** with the prompt `Currency` and one item per currency:
    `EGP`, `USD`, `EUR`. Each branch does nothing — the chosen item is the value you use.
 4. Add **Choose from Menu** with the prompt `Account` and one item per account, spelled
-   exactly as the `name` in `Budget/Settings/accounts.json`. Write a space as `%20`, so
+   exactly as the `name` on its note in `Budget/Accounts/`. Write a space as `%20`, so
    `CIB Visa` becomes `CIB%20Visa`.
 5. Add **Choose from Menu** with the prompt `Type` and four items: `debit`, `credit`,
    `transfer`, `fee`.
@@ -202,7 +249,7 @@ present, and `status: needs_review` otherwise.
 | `type` | `transaction_type` | `debit`, `credit`, `transfer`, or `fee` |
 | `from` | `from_account` | Explicit source; use with `to` for a transfer |
 | `to` | `to_account` | Explicit destination |
-| `merchant` | `merchant` | Optional |
+| `merchant` | `merchant`, `recipient` or `sender` | Optional; `recipient`, `sender` and `counterparty` are accepted as the same parameter, and the type decides which key the name is written under |
 | `category` | `category` | Optional; defaults to `Uncategorized` |
 | `timestamp` | `timestamp` | Optional ISO 8601; the current time is used when omitted |
 

@@ -78,6 +78,12 @@ test("status filter", () => {
   assert.equal(applyFilter(records, filterOf({ statuses: ["needs_review", "pending"] }), TODAY).length, 2);
 });
 
+test("a search typed with single spaces finds a padded message", () => {
+  const records = [makeTransaction({ merchant: "CANCUN RESORT   SPA" })];
+  const found = applyFilter(records, filterOf({ search: "cancun resort spa" }), TODAY);
+  assert.equal(found.length, 1);
+});
+
 test("search matches merchant, SMS body, category and account, case-insensitively", () => {
   const records = [
     makeTransaction({ merchant: "Carrefour" }),

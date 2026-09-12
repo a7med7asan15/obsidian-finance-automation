@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   totalsByCurrency, spendByCategory, spendByMerchant, spendByDay, spendByMonth,
-  groupByDay, primaryCurrency,
+  groupByDay, primaryCurrency, counterpartySummary,
 } from "../src/domain/aggregate.ts";
 import { makeTransaction } from "./helpers/factory.ts";
 
@@ -155,4 +155,88 @@ test("primaryCurrency is the one with the most records", () => {
   ];
   assert.equal(primaryCurrency(records), "EGP");
   assert.equal(primaryCurrency([]), "EGP");
+});
+
+// --- the list of everyone the money met ---
+
+test("counterpartySummary gives one row per name, biggest first", () => {
+  const rows = counterpartySummary([
+    makeTransaction({ merchant: "Carrefour", amount: 100 }),
+    makeTransaction({ merchant: "carrefour", amount: 50 }),
+    makeTransaction({ merchant: "Seoudi", amount: 400 }),
+  ]);
+  assert.deepEqual(rows.map((row) => [row.name, row.count, row.spent]), [
+    ["Seoudi", 1, 400],
+    ["Carrefour", 2, 150],
+  ]);
+});
+
+test("a bank's padding and letter case do not split one shop into two rows", () => {
+  const rows = counterpartySummary([
+    makeTransaction({ merchant: "CANCUN RESORT   SPA", amount: 350 }),
+    makeTransaction({ merchant: "Cancun Resort Spa", amount: 200 }),
+  ]);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0]!.name, "CANCUN RESORT SPA");
+  assert.equal(rows[0]!.count, 2);
+  assert.equal(rows[0]!.spent, 550);
+});
+
+test("money in and money out are kept apart, and every role is listed", () => {
+  const rows = counterpartySummary([
+    makeTransaction({ sender: "ACME", merchant: "", transaction_type: "credit", amount: 12000 }),
+    makeTransaction({ merchant: "ACME", transaction_type: "debit", amount: 300 }),
+  ]);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0]!.received, 12000);
+  assert.equal(rows[0]!.spent, 300);
+  assert.deepEqual(rows[0]!.roles.sort(), ["merchant", "sender"]);
+});
+
+test("a party carries the categories its transactions hold", () => {
+  const [agreed] = counterpartySummary([
+    makeTransaction({ merchant: "Seoudi", category: "Groceries" }),
+    makeTransaction({ merchant: "Seoudi", category: "Groceries" }),
+  ]);
+  assert.deepEqual(agreed!.categories, ["Groceries"]);
+  assert.equal(agreed!.category, "Groceries");
+
+  const [mixed] = counterpartySummary([
+    makeTransaction({ merchant: "Seoudi", category: "Groceries" }),
+    makeTransaction({ merchant: "Seoudi", category: "Dining" }),
+  ]);
+  assert.deepEqual(mixed!.categories, ["Dining", "Groceries"]);
+  // No single answer is true yet, so the row offers none.
+  assert.equal(mixed!.category, "");
+});
+
+test("a party carries every note path, so one choice can file the lot", () => {
+  const [row] = counterpartySummary([
+    makeTransaction({ merchant: "Seoudi" }),
+    makeTransaction({ merchant: "Seoudi" }),
+  ]);
+  assert.equal(row!.paths.length, 2);
+  assert.ok(row!.paths.every((path) => path.startsWith("Budget/Transactions/")));
+});
+
+test("the last date and the dominant currency come along", () => {
+  const [row] = counterpartySummary([
+    makeTransaction({ merchant: "Seoudi", timestamp: "2026-09-01T12:00:00+03:00", currency: "EGP" }),
+    makeTransaction({ merchant: "Seoudi", timestamp: "2026-09-09T12:00:00+03:00", currency: "EGP" }),
+    makeTransaction({ merchant: "Seoudi", timestamp: "2026-09-05T12:00:00+03:00", currency: "USD" }),
+  ]);
+  assert.equal(row!.lastDate, "2026-09-09");
+  assert.equal(row!.currency, "EGP");
+});
+
+test("transactions naming nobody are left out of the list", () => {
+  assert.deepEqual(counterpartySummary([makeTransaction({ merchant: "", amount: 100 })]), []);
+});
+
+test("an excluded transaction still lists its party", () => {
+  const rows = counterpartySummary([
+    makeTransaction({ merchant: "Seoudi", excluded: true, exclude_source: "manual" }),
+  ]);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0]!.count, 1);
 });

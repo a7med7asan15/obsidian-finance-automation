@@ -443,7 +443,13 @@
   background: color-mix(in srgb, var(--fin-cat-color) 15%, transparent);
 }
 .fin-category-body { flex: 1 1 auto; min-width: 0; }
-.fin-category-name { font-weight: 600; margin-bottom: 6px; }
+.fin-category-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.fin-category-name { font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
+.fin-category-count { font-size: 0.8em; color: var(--text-muted); white-space: nowrap; }
+.fin-category-actions { margin-left: auto; display: flex; gap: 2px; flex: 0 0 auto; }
+.fin-category-actions button { min-width: var(--fin-touch); min-height: var(--fin-touch); }
+.fin-category-body .setting-item-control { flex: 1 1 55%; }
+.fin-keyword-input { width: 100%; resize: vertical; font-size: 0.9em; }
 
 .fin-swatches { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 4px; }
 .fin-swatch {
@@ -451,6 +457,57 @@
   border: 2px solid transparent; padding: 0; cursor: pointer;
 }
 .fin-swatch.is-active { border-color: var(--text-normal); }
+
+/* ---------- merchants ---------- */
+.fin-merchant-bar {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+  padding: 10px var(--fin-gap) 4px;
+}
+.fin-merchant-count { font-size: 0.85em; font-weight: 600; }
+.fin-merchant-sorts { display: flex; gap: 6px; margin-left: auto; }
+.fin-merchant-unnamed {
+  flex: 1 0 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+  padding: 4px var(--fin-gap) 0;
+  font-size: 0.75em; color: var(--text-muted);
+}
+.fin-merchant-bar .fin-merchant-unnamed { padding: 4px 0 0; }
+
+.fin-merchant-list { padding: 4px var(--fin-gap) 96px; }
+
+.fin-merchant-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-areas: "head head" "meta meta" "chips chips" "select open";
+  gap: 4px 8px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--fin-border);
+}
+/* A party still sitting in Uncategorized is the reason to be on this tab. */
+.fin-merchant-row.is-pending { border-left: 2px solid var(--interactive-accent); padding-left: 8px; }
+
+.fin-merchant-head { grid-area: head; display: flex; align-items: baseline; gap: 8px; }
+.fin-merchant-name {
+  flex: 1 1 auto; min-width: 0; font-weight: 600; cursor: pointer;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.fin-merchant-amounts { flex: 0 0 auto; display: flex; align-items: baseline; gap: 6px; }
+.fin-merchant-currency { font-size: 0.75em; color: var(--text-muted); }
+
+.fin-merchant-meta { grid-area: meta; font-size: 0.75em; color: var(--text-muted); }
+
+.fin-merchant-chips { grid-area: chips; display: flex; flex-wrap: wrap; gap: 4px; }
+.fin-merchant-chip {
+  padding: 1px 8px; border-radius: 999px; font-size: 0.7em;
+  color: var(--fin-cat-color);
+  background: color-mix(in srgb, var(--fin-cat-color) 15%, transparent);
+}
+
+.fin-merchant-select { grid-area: select; min-height: 34px; max-width: 100%; }
+.fin-merchant-open {
+  grid-area: open; display: grid; place-items: center;
+  min-width: 34px; min-height: 34px; padding: 0;
+  border: none; background: transparent; color: var(--text-muted); cursor: pointer;
+}
 
 /* ---------- stats actions ---------- */
 .fin-stats-actions { padding: 0 var(--fin-gap) 96px; }

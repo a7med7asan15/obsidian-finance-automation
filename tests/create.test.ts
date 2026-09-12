@@ -127,6 +127,9 @@ test("a structured capture normalises its fields", async () => {
   assert.match(content, /currency: "EGP"/);
   assert.match(content, /to_account: "Salary account"/);
   assert.match(content, /transaction_type: "credit"/);
+  // Money in came from a sender, so the name is not written under `merchant`.
+  assert.match(content, /sender: "Employer"/);
+  assert.doesNotMatch(content, /merchant:/);
   assert.match(content, /status: parsed/);
   assert.match(content, /source: iphone-shortcut-fields/);
 });
@@ -148,12 +151,13 @@ test("a manual transaction writes its note under a Notes heading", async () => {
     fromAccount: "Cash",
     toAccount: "",
     category: "Groceries",
-    merchant: "Souq",
+    counterparty: "Souq",
     type: "debit",
     note: "Split with Sara.",
   });
   const content = app.vault.files.get(file.path)!;
   assert.match(content, /source: manual-ui/);
+  assert.match(content, /merchant: "Souq"/);
   assert.match(content, /status: parsed/);
   assert.match(content, /## Notes\n\nSplit with Sara\./);
   assert.match(content, /transaction_id: "[0-9a-f]{16}"/);

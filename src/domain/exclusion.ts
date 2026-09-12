@@ -41,7 +41,9 @@ export interface ExclusionChange {
 function textOf(record: TransactionRecord, field: RuleField): string {
   switch (field) {
     case "sms_message": return record.smsMessage;
-    case "merchant": return record.merchant;
+    // Kept spelled "merchant" so existing rules keep working; it matches a
+    // recipient or a sender just as well.
+    case "merchant": return record.counterparty;
     case "from_account": return record.fromAccount;
     case "to_account": return record.toAccount;
     case "category": return record.category;

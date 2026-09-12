@@ -202,3 +202,60 @@ test("parserChanges keeps a value set by hand", () => {
 
   assert.deepEqual(changes, {});
 });
+
+test("buildTransaction reads the party from whichever of the three keys holds it", () => {
+  const purchase = buildTransaction({ merchant: "Carrefour" }, "Budget/Transactions/x.md");
+  assert.equal(purchase.counterparty, "Carrefour");
+  assert.equal(purchase.counterpartyRole, "merchant");
+
+  const sent = buildTransaction({ recipient: "Ahmed Hassan" }, "Budget/Transactions/x.md");
+  assert.equal(sent.counterparty, "Ahmed Hassan");
+  assert.equal(sent.counterpartyRole, "recipient");
+
+  const received = buildTransaction({ sender: "ACME Payroll" }, "Budget/Transactions/x.md");
+  assert.equal(received.counterparty, "ACME Payroll");
+  assert.equal(received.counterpartyRole, "sender");
+
+  const nobody = buildTransaction({ amount: 10 }, "Budget/Transactions/x.md");
+  assert.equal(nobody.counterparty, "");
+  assert.equal(nobody.counterpartyRole, "");
+});
+
+test("searchBlob collapses the runs of spaces a bank pads its messages with", () => {
+  const record = buildTransaction({
+    merchant: "CANCUN RESORT   SPA", sms_message: "EGP 350.00  at  CANCUN RESORT   SPA",
+  }, "Budget/Transactions/x.md");
+  assert.ok(record.searchBlob.includes("cancun resort spa"));
+  assert.equal(record.counterparty, "CANCUN RESORT SPA");
+});
+
+test("searchBlob finds a recipient and a sender too", () => {
+  const sent = buildTransaction({ recipient: "Ahmed Hassan" }, "Budget/Transactions/x.md");
+  assert.ok(sent.searchBlob.includes("ahmed hassan"));
+  const received = buildTransaction({ sender: "ACME Payroll" }, "Budget/Transactions/x.md");
+  assert.ok(received.searchBlob.includes("acme payroll"));
+});
+
+test("parserChanges leaves all three party keys alone once a note names anyone", () => {
+  const record = buildTransaction(
+    { timestamp: "2026-09-11T19:14:11.222Z", sender: "ACME Payroll", status: "needs_review" },
+    "Budget/Transactions/2026/Sep/11T19-14-11.md",
+  );
+
+  // The parser read the message as a purchase, but the note already says who
+  // was on the other side, so it keeps its answer and gains no second name.
+  const changes = parserChanges(record, { merchant: "SOME SHOP", recipient: "", sender: "" });
+
+  assert.deepEqual(changes, {});
+});
+
+test("parserChanges fills the party key the parser chose when the note names nobody", () => {
+  const record = buildTransaction(
+    { timestamp: "2026-09-11T19:14:11.222Z", status: "pending" },
+    "Budget/Transactions/2026/Sep/11T19-14-11.md",
+  );
+
+  const changes = parserChanges(record, { merchant: "", recipient: "Ahmed Hassan", sender: "" });
+
+  assert.deepEqual(changes, { recipient: "Ahmed Hassan" });
+});

@@ -1,7 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { parseSms, stableId, normalizeCurrency, extractTimestamp } from "../src/domain/parser/sms.ts";
+import {
+  parseSms, stableId, normalizeCurrency, extractTimestamp, mergeAccountSources,
+} from "../src/domain/parser/sms.ts";
+import { buildAccount } from "../src/data/records.ts";
 import { categorize } from "../src/domain/categorize.ts";
+import { DEFAULT_PARTY_PATTERNS, withDefaultPatterns } from "../src/domain/parser/defaults.ts";
 import type { SmsPatterns, AccountConfig, CategoryRules } from "../src/domain/parser/sms.ts";
 
 const PATTERNS: SmsPatterns = {
@@ -151,4 +155,134 @@ test("parseSms ignores date_patterns entirely", () => {
     "2026-09-05T12:00:00+03:00", { default_currency: "EGP" }, PATTERNS, ACCOUNTS, CATEGORIES,
   );
   assert.deepEqual(withDates, without);
+});
+
+const accountNote = (frontmatter: Record<string, unknown>, name: string) =>
+  buildAccount({ type: "account", ...frontmatter }, `Budget/Accounts/${name}.md`);
+
+test("mergeAccountSources takes card endings straight from the account notes", () => {
+  const merged = mergeAccountSources(
+    [accountNote({ name: "CIB", currency: "EGP", card_endings: ["0779", "1934"] }, "CIB")],
+    { accounts: [] },
+  );
+  assert.deepEqual(merged.accounts, [
+    { name: "CIB", currency: "EGP", card_endings: ["0779", "1934"], aliases: [] },
+  ]);
+});
+
+test("mergeAccountSources unions a note and its accounts.json entry by name", () => {
+  const merged = mergeAccountSources(
+    [accountNote({ name: "CIB", currency: "EGP", card_endings: ["1934"] }, "CIB")],
+    { accounts: [{ name: "cib", currency: "EGP", card_endings: ["0779"], aliases: ["cib"] }] },
+  );
+  assert.equal(merged.accounts.length, 1);
+  assert.equal(merged.accounts[0]!.name, "CIB");
+  assert.deepEqual(merged.accounts[0]!.card_endings, ["1934", "0779"]);
+  assert.deepEqual(merged.accounts[0]!.aliases, ["cib"]);
+});
+
+test("mergeAccountSources keeps an accounts.json entry that has no note", () => {
+  const merged = mergeAccountSources(
+    [accountNote({ name: "CIB", card_endings: ["0779"] }, "CIB")],
+    { accounts: [{ name: "Wallet", currency: "EGP", card_endings: ["4242"] }] },
+  );
+  assert.deepEqual(merged.accounts.map((account) => account.name), ["CIB", "Wallet"]);
+});
+
+test("an ending listed only on the note resolves to the account", () => {
+  const accounts = mergeAccountSources(
+    [accountNote({ name: "CIB", currency: "EGP", card_endings: ["0779", "1934"] }, "CIB")],
+    { accounts: [] },
+  );
+  const result = parseSms(
+    "Card ending 1934 purchase amount EGP 99 at Carrefour",
+    "2026-09-05T12:00:00+03:00", { default_currency: "EGP" }, PATTERNS, accounts, CATEGORIES,
+  );
+  assert.equal(result.from_account, "CIB");
+  assert.equal(result.status, "parsed");
+});
+
+// --- the party a message names ---
+
+const withDefaults = (sms: string, patterns: SmsPatterns = PATTERNS) =>
+  parseSms(
+    sms, "2026-09-05T12:00:00+03:00", { default_currency: "EGP" },
+    withDefaultPatterns(patterns), ACCOUNTS, CATEGORIES,
+  );
+
+test("a purchase names a merchant and leaves the other two keys empty", () => {
+  const result = withDefaults("Card 0774 purchase amount EGP 120 at Seoudi on 05/09");
+  assert.equal(result.merchant, "Seoudi");
+  assert.equal(result.recipient, "");
+  assert.equal(result.sender, "");
+});
+
+test("a transfer names a recipient, not a merchant", () => {
+  const result = withDefaults("EGP 500 transferred to Ahmed Hassan from account 0774. Ref 99.");
+  assert.equal(result.transaction_type, "transfer");
+  assert.equal(result.recipient, "Ahmed Hassan");
+  assert.equal(result.merchant, "");
+  assert.equal(result.sender, "");
+});
+
+test("money in names a sender, not a merchant", () => {
+  const result = withDefaults("Account 0774 credited EGP 12000 from ACME PAYROLL on 01/09.");
+  assert.equal(result.transaction_type, "credit");
+  assert.equal(result.sender, "ACME PAYROLL");
+  assert.equal(result.merchant, "");
+  assert.equal(result.recipient, "");
+});
+
+test("the Arabic 'عند' wording gives the merchant, with the bank's padding folded", () => {
+  const result = withDefaults(
+    "تم خصم EGP 350.00  من بطاقة الخصم المباشر # **0774 باستخدام Apple Pay عند  CANCUN RESORT   SPA في  10/09/26 12:16الرصيد المتاح  EGP725.07.",
+  );
+  assert.equal(result.merchant, "CANCUN RESORT SPA");
+  assert.equal(result.transaction_type, "debit");
+});
+
+test("'من بطاقة' is the card the money left, never a sender", () => {
+  // The same Arabic debit: "from the direct debit card" must not be read as a
+  // name, or every card purchase would claim a sender called "the card".
+  const result = withDefaults(
+    "تم اضافة EGP 350.00 من بطاقة الخصم المباشر # **0774 في 10/09/26",
+  );
+  assert.equal(result.transaction_type, "credit");
+  assert.equal(result.sender, "");
+});
+
+test("an Arabic transfer names the person it went to", () => {
+  const result = withDefaults("تم تحويل EGP 500 من حساب 0774 إلى احمد حسن في 05/09/26");
+  assert.equal(result.transaction_type, "transfer");
+  assert.equal(result.recipient, "احمد حسن");
+});
+
+test("a refund credits the merchant it came from, the merchant patterns filling in", () => {
+  const result = withDefaults("Account 0774 credited EGP 90 refund at Carrefour on 05/09.");
+  assert.equal(result.transaction_type, "credit");
+  assert.equal(result.sender, "Carrefour");
+});
+
+test("the merchant feeds categorising, so a name alone can file a transaction", () => {
+  const result = withDefaults("Card 0774 debited EGP 60 at CARREFOUR MAADI on 05/09");
+  assert.equal(result.merchant, "CARREFOUR MAADI");
+  assert.equal(result.category, "Groceries");
+});
+
+test("withDefaultPatterns appends the built-in party patterns after the vault's own", () => {
+  const merged = withDefaultPatterns(PATTERNS);
+  assert.deepEqual(merged.merchant_patterns, [
+    ...PATTERNS.merchant_patterns!, ...DEFAULT_PARTY_PATTERNS.merchant_patterns,
+  ]);
+  assert.deepEqual(merged.recipient_patterns, DEFAULT_PARTY_PATTERNS.recipient_patterns);
+  // Nothing else is topped up: a pattern removed from the vault file stays removed.
+  assert.deepEqual(merged.amount_patterns, PATTERNS.amount_patterns);
+  assert.deepEqual(merged.card_ending_patterns, PATTERNS.card_ending_patterns);
+});
+
+test("withDefaultPatterns adds no duplicate when the vault already has a default", () => {
+  const merged = withDefaultPatterns({
+    merchant_patterns: [DEFAULT_PARTY_PATTERNS.merchant_patterns[0]!],
+  });
+  assert.deepEqual(merged.merchant_patterns, DEFAULT_PARTY_PATTERNS.merchant_patterns);
 });

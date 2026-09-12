@@ -53,7 +53,7 @@ export class FilterBar {
     setIcon(searchIcon, "search");
     const input = searchRow.createEl("input", {
       cls: "fin-search-input",
-      attr: { type: "search", placeholder: "Search merchant, SMS, category", value: filter.search },
+      attr: { type: "search", placeholder: "Search name, SMS, category", value: filter.search },
     });
     // Debounced so a full re-render does not run on every keystroke.
     let timer: number | null = null;

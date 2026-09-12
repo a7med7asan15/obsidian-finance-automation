@@ -71,8 +71,54 @@ export class FakeAdapter {
   }
 }
 
-export function fakeApp(): App & { vault: FakeVault & { adapter: FakeAdapter } } {
+/**
+ * The slice of `app.fileManager` the category writes go through. Frontmatter is
+ * treated as flat `key: value` lines, which is all a category note has.
+ */
+export class FakeFileManager {
+  private readonly vault: FakeVault;
+
+  constructor(vault: FakeVault) {
+    this.vault = vault;
+  }
+
+  async renameFile(file: TFile, newPath: string): Promise<void> {
+    const content = this.vault.files.get(file.path) ?? "";
+    this.vault.files.delete(file.path);
+    this.vault.files.set(newPath, content);
+  }
+
+  async trashFile(file: TFile): Promise<void> {
+    this.vault.files.delete(file.path);
+  }
+
+  async processFrontMatter(
+    file: TFile,
+    edit: (frontmatter: Record<string, unknown>) => void,
+  ): Promise<void> {
+    const content = this.vault.files.get(file.path) ?? "";
+    const match = /^---\n([\s\S]*?)\n---\n?/.exec(content);
+    const frontmatter: Record<string, unknown> = {};
+    for (const line of (match?.[1] ?? "").split("\n")) {
+      const colon = line.indexOf(":");
+      if (colon > 0) frontmatter[line.slice(0, colon).trim()] = line.slice(colon + 1).trim();
+    }
+    edit(frontmatter);
+    const body = match ? content.slice(match[0].length) : content;
+    const lines = Object.entries(frontmatter).map(([key, value]) => `${key}: ${value ?? ""}`);
+    this.vault.files.set(file.path, `---\n${lines.join("\n")}\n---\n${body}`);
+  }
+}
+
+export function fakeApp(): App & {
+  vault: FakeVault & { adapter: FakeAdapter };
+  fileManager: FakeFileManager;
+} {
   const vault = new FakeVault() as FakeVault & { adapter: FakeAdapter };
   vault.adapter = new FakeAdapter(vault);
-  return { vault } as unknown as App & { vault: FakeVault & { adapter: FakeAdapter } };
+  const fileManager = new FakeFileManager(vault);
+  return { vault, fileManager } as unknown as App & {
+    vault: FakeVault & { adapter: FakeAdapter };
+    fileManager: FakeFileManager;
+  };
 }

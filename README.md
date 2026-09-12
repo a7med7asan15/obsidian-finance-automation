@@ -7,6 +7,7 @@ Finance Automation parses SMS transaction notes into structured frontmatter usin
 - Processes pending transaction notes when Obsidian starts.
 - Processes pending notes shortly after a transaction note is created or changed.
 - Parses configurable English and Arabic SMS patterns.
+- Records who was on the other side of every transaction — a `merchant` for a purchase, a `recipient` for money sent, a `sender` for money received — and lists them all in one place so categories can be settled a name at a time.
 - Captures a bank SMS from an iPhone automation, either as a file dropped in `Budget/Inbox` or through an `obsidian://` link — the message alone — and derives every field from it in the vault. The inbox is the reliable one: a link cannot carry a long message and is lost when it is what launches Obsidian.
 - Captures a manual transaction from a tap-to-fill Shortcut for cash and anything with no SMS.
 - Applies exclusion rules, which a manual decision always overrides.
@@ -32,8 +33,8 @@ obsidian://finance-transaction?amount=120.50&currency=EGP&account=Cash&type=debi
 
 The SMS way needs no date and no other parameter — URL-encode the message and the
 plugin reads the amount, currency, type, merchant, category, and the account (from the
-account or card number, via `card_endings` in `Budget/Settings/accounts.json`) out of the
-message text.
+account or card number, via `card_endings` on the account note in `Budget/Accounts/`) out
+of the message text.
 See [iPhone Shortcuts](docs/iphone-shortcuts.md) for the complete steps for both.
 
 ## Install with BRAT
@@ -73,17 +74,50 @@ Restart Obsidian, then enable **Finance Automation** under Community plugins.
 ## The Budget view
 
 Open it from the wallet icon in the ribbon, or with **Open Budget** from the command
-palette. It has three tabs sharing one set of filters.
+palette. It has four tabs sharing one set of filters.
 
 - **Transactions** — grouped by day, defaulting to the current month. Step months with
   the arrows, or tap the month name to switch to a year, all time, or a custom range.
   Tap a transaction to edit it; long-press (iPhone) or right-click (desktop) for quick
   category and exclude actions. The + button adds one by hand.
+- **Merchants** — every merchant, recipient and sender the filtered transactions name,
+  one row each, largest first. Choosing a category files every transaction that name
+  already has *and* writes the name into `Budget/Settings/Categories/rules.json`, so the
+  next message mentioning it files itself. Sort by amount, count, recency, or name, and
+  narrow the list to the names still sitting in Uncategorized. The dropdown also offers
+  **New category…**, which writes the category and files the name in one step. Reach the
+  tab from the command palette with **List merchants, recipients and senders**.
+- **Categories** (command palette: **Edit categories and budgets**, or the button under
+  the Budgets panel on the Stats tab) adds, renames and deletes categories, and sets each
+  one's colour, icon, monthly budget and keywords. Renaming re-files every transaction
+  that carried the old name and moves its keywords along with it. Deleting asks where its
+  transactions should go and sends the note to the trash; nothing is deleted from a
+  transaction. There is no need to write a category note by hand any more.
 - **Excluding a transaction** keeps it in the list but removes it from every total.
   Use it for a reversal, a duplicate SMS, or anything that did not really happen.
 - **Exclusion rules** (command palette: **Edit exclusion rules**) exclude matching
   transactions automatically. A transaction you excluded by hand is never overridden
   by a rule.
+
+## The other side of a transaction
+
+Each transaction note names the party it involved under the key that says what that
+party was: `merchant` for a purchase or a fee, `recipient` for money sent, `sender` for
+money received. Only ever one of the three, chosen from `transaction_type`, so a salary
+is never filed as a shop. Everything that used to read `merchant` — search, exclusion
+rules, the CSV export, the top-merchants chart — reads whichever key the note uses.
+
+The names come out of the message itself, using `merchant_patterns`, `recipient_patterns`
+and `sender_patterns` in `Budget/Settings/sms_patterns.json`. A built-in set of patterns
+for the usual English and Arabic wordings (`at`, `to`, `from`, `عند`, `لدى`, `إلى`, `من`)
+runs after whatever that file holds, so a bank's ordinary phrasing is understood out of
+the box and a pattern written by hand still takes precedence.
+
+A transaction that reached `status: parsed` is never parsed again, so notes filed before
+the parser knew a wording keep an empty party key. **Fill in missing merchants from
+stored messages** in the command palette — also offered as a button on the Merchants tab —
+reads those messages again and fills only the blanks. A name already in a note, typed or
+parsed, is never touched.
 
 ## Upgrading to 3.0.0
 

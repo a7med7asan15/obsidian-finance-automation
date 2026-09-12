@@ -164,7 +164,7 @@ export class StatsTab {
     if (!progress.length) {
       body.createEl("p", {
         cls: "fin-panel-empty",
-        text: "No budgets set. Open a category from the Stats tab to set one.",
+        text: "No budgets set yet. Give a category a monthly budget and it appears here.",
       });
       this.renderCategoryEditorButton(body);
       return;

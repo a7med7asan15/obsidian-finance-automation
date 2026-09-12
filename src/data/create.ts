@@ -3,6 +3,7 @@ import type { App } from "obsidian";
 import { TRANSACTIONS_DIR } from "../constants.ts";
 import { ensureFolder } from "./vault-json.ts";
 import { extractTimestamp, normalizeCurrency, stableId } from "../domain/parser/sms.ts";
+import { roleForType } from "../domain/counterparty.ts";
 import type { SmsPatterns } from "../domain/parser/sms.ts";
 import type { TransactionType } from "./types.ts";
 
@@ -111,7 +112,8 @@ export interface TransactionFields {
   from_account: string;
   to_account: string;
   category: string;
-  merchant: string;
+  /** The merchant, recipient or sender; the type decides which key holds it. */
+  counterparty: string;
   /** Kept as a raw string so an unrecognised type from a capture link survives verbatim. */
   transaction_type: string;
   status: string;
@@ -121,6 +123,9 @@ export interface TransactionFields {
 }
 
 export function transactionMarkdown(fields: TransactionFields, sms: string, note = ""): string {
+  // One party key, named for the role the type implies, so a note never claims
+  // a salary came from a merchant.
+  const partyKey = roleForType(fields.transaction_type);
   const lines = [
     "---",
     "type: transaction",
@@ -131,7 +136,7 @@ export function transactionMarkdown(fields: TransactionFields, sms: string, note
     fields.from_account ? `from_account: ${yamlString(fields.from_account)}` : "from_account:",
     fields.to_account ? `to_account: ${yamlString(fields.to_account)}` : "to_account:",
     `category: ${yamlString(fields.category || "Uncategorized")}`,
-    fields.merchant ? `merchant: ${yamlString(fields.merchant)}` : "merchant:",
+    fields.counterparty ? `${partyKey}: ${yamlString(fields.counterparty)}` : `${partyKey}:`,
     fields.transaction_type ? `transaction_type: ${yamlString(fields.transaction_type)}` : "transaction_type:",
     `status: ${fields.status || "pending"}`,
     `source: ${fields.source}`,
@@ -207,7 +212,7 @@ export async function createRawSmsTransaction(
     from_account: "",
     to_account: "",
     category: "Uncategorized",
-    merchant: "",
+    counterparty: "",
     transaction_type: "",
     status: "pending",
     source: "iphone-shortcut-sms",
@@ -233,10 +238,10 @@ export async function createStructuredTransaction(app: App, params: ProtocolPara
   const timestamp = protocolValue(params, "timestamp", "date") || new Date().toISOString();
   const sms = protocolValue(params, "message", "sms", "text");
   const category = protocolValue(params, "category") || "Uncategorized";
-  const merchant = protocolValue(params, "merchant");
+  const counterparty = protocolValue(params, "merchant", "recipient", "sender", "counterparty");
   const checks = [amount !== null, Boolean(currency), validType, Boolean(fromAccount || toAccount)];
   const complete = checks.every(Boolean);
-  const fingerprint = [timestamp, amount, currency, transactionType, fromAccount, toAccount, merchant].join("|");
+  const fingerprint = [timestamp, amount, currency, transactionType, fromAccount, toAccount, counterparty].join("|");
   const path = uniqueTransactionPath(app, timestamp);
   const content = transactionMarkdown({
     timestamp,
@@ -245,7 +250,7 @@ export async function createStructuredTransaction(app: App, params: ProtocolPara
     from_account: fromAccount,
     to_account: toAccount,
     category,
-    merchant,
+    counterparty,
     transaction_type: transactionType,
     status: complete ? "parsed" : "needs_review",
     source: "iphone-shortcut-fields",
@@ -262,7 +267,7 @@ export interface ManualTransactionFields {
   fromAccount: string;
   toAccount: string;
   category: string;
-  merchant: string;
+  counterparty: string;
   type: TransactionType;
   note: string;
 }
@@ -279,14 +284,14 @@ export async function createManualTransaction(
     from_account: fields.fromAccount,
     to_account: fields.toAccount,
     category: fields.category || "Uncategorized",
-    merchant: fields.merchant,
+    counterparty: fields.counterparty,
     transaction_type: fields.type,
     status: "parsed",
     source: "manual-ui",
     parser_confidence: 1,
     transaction_id: stableId(
       [fields.timestamp, fields.amount, fields.currency, fields.type,
-       fields.fromAccount, fields.toAccount, fields.merchant].join("|"),
+       fields.fromAccount, fields.toAccount, fields.counterparty].join("|"),
     ),
   }, "", fields.note);
   return createFile(app, path, content);

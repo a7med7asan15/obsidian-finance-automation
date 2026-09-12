@@ -7,7 +7,7 @@ import type FinanceAutomationPlugin from "../../main.ts";
 
 const FIELD_LABELS: Record<RuleField, string> = {
   sms_message: "SMS text",
-  merchant: "Merchant",
+  merchant: "Merchant, recipient or sender",
   from_account: "From account",
   to_account: "To account",
   category: "Category",
@@ -282,7 +282,7 @@ export class RuleEditModal extends Modal {
     const list = this.previewEl.createEl("ul", { cls: "fin-rule-preview-list" });
     for (const record of matches.slice(0, 5)) {
       list.createEl("li", {
-        text: `${record.date ?? "?"} · ${record.merchant || record.category} · ${record.amount ?? "?"} ${record.currency}`,
+        text: `${record.date ?? "?"} · ${record.counterparty || record.category} · ${record.amount ?? "?"} ${record.currency}`,
       });
     }
   }

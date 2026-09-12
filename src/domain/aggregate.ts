@@ -1,5 +1,6 @@
 import { addMonths, daysBetween } from "./dates.ts";
-import type { TransactionRecord } from "../data/types.ts";
+import { cleanCounterpartyName, counterpartyKey } from "./counterparty.ts";
+import type { CounterpartyRole, TransactionRecord } from "../data/types.ts";
 
 export interface Totals {
   income: number;
@@ -84,8 +85,8 @@ export function spendByMerchant(
   return sumBy(
     records,
     currency,
-    (record) => (record.merchant ? record.merchant.toLowerCase() : null),
-    (record) => record.merchant,
+    (record) => (record.counterparty ? record.counterparty.toLowerCase() : null),
+    (record) => record.counterparty,
   )
     .slice(0, limit)
     .map(({ label, amount, count }) => ({ merchant: label, amount, count }));
@@ -149,4 +150,95 @@ export function primaryCurrency(records: TransactionRecord[]): string {
   }
   const ranked = [...counted].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
   return ranked[0]?.[0] ?? "EGP";
+}
+
+export interface CounterpartyTotal {
+  /** The folded name two spellings of one shop share. */
+  key: string;
+  /** The longest spelling seen, which is usually the most complete one. */
+  name: string;
+  roles: CounterpartyRole[];
+  count: number;
+  /** Magnitudes, so both read as positive money. */
+  spent: number;
+  received: number;
+  /** The currency most of this party's transactions are in. */
+  currency: string;
+  /** Every category its transactions carry, sorted. */
+  categories: string[];
+  /** The one category they agree on, or "" when they disagree. */
+  category: string;
+  lastDate: string | null;
+  /** Every note, so a category can be applied to the lot. */
+  paths: string[];
+}
+
+/**
+ * Every party named across these transactions, one row each, biggest first.
+ *
+ * This is the list to categorise from: a shop appears once however many times
+ * you visited it, carrying the categories its transactions currently hold, so
+ * the ones still sitting in Uncategorized stand out. Excluded transactions are
+ * listed too — a party you have decided to ignore still needs a name — and the
+ * caller decides what to feed in, so the period and filters in the Budget view
+ * scope the list the same way they scope everything else.
+ */
+export function counterpartySummary(records: TransactionRecord[]): CounterpartyTotal[] {
+  const buckets = new Map<string, CounterpartyTotal & { currencies: Map<string, number> }>();
+
+  for (const record of records) {
+    const name = cleanCounterpartyName(record.counterparty);
+    if (!name) continue;
+    const key = counterpartyKey(name);
+    let bucket = buckets.get(key);
+    if (!bucket) {
+      bucket = {
+        key, name, roles: [], count: 0, spent: 0, received: 0, currency: "",
+        categories: [], category: "", lastDate: null, paths: [],
+        currencies: new Map<string, number>(),
+      };
+      buckets.set(key, bucket);
+    }
+
+    if (name.length > bucket.name.length) bucket.name = name;
+    if (record.counterpartyRole && !bucket.roles.includes(record.counterpartyRole)) {
+      bucket.roles.push(record.counterpartyRole);
+    }
+    bucket.count += 1;
+    const value = Math.abs(record.amount ?? 0);
+    if (record.type === "credit") bucket.received += value;
+    else bucket.spent += value;
+    if (record.currency) {
+      bucket.currencies.set(record.currency, (bucket.currencies.get(record.currency) ?? 0) + 1);
+    }
+    if (record.category && !bucket.categories.includes(record.category)) {
+      bucket.categories.push(record.category);
+    }
+    if (record.date && (!bucket.lastDate || record.date > bucket.lastDate)) {
+      bucket.lastDate = record.date;
+    }
+    bucket.paths.push(record.path);
+  }
+
+  const totals: CounterpartyTotal[] = [];
+  for (const bucket of buckets.values()) {
+    const ranked = [...bucket.currencies].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+    totals.push({
+      key: bucket.key,
+      name: bucket.name,
+      roles: bucket.roles,
+      count: bucket.count,
+      spent: bucket.spent,
+      received: bucket.received,
+      currency: ranked[0]?.[0] ?? "",
+      categories: [...bucket.categories].sort((a, b) => a.localeCompare(b)),
+      category: bucket.categories.length === 1 ? bucket.categories[0]! : "",
+      lastDate: bucket.lastDate,
+      paths: bucket.paths,
+    });
+  }
+
+  return totals.sort(
+    (a, b) => b.spent + b.received - (a.spent + a.received) || a.name.localeCompare(b.name),
+  );
 }

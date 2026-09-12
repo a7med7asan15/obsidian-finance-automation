@@ -1,5 +1,6 @@
 import { readBoolean, readNumber, readString, readStringList } from "./frontmatter.ts";
 import { toDateParts } from "../domain/dates.ts";
+import { readCounterparty } from "../domain/counterparty.ts";
 import { TRANSACTIONS_DIR } from "../constants.ts";
 import type {
   AccountRecord, CategoryRecord, ExcludeSource, TransactionRecord, TransactionStatus, TransactionType,
@@ -41,7 +42,11 @@ export function buildTransaction(
       ? "rule"
       : "manual";
 
-  const merchant = readString(frontmatter.merchant);
+  const { counterparty, counterpartyRole } = readCounterparty({
+    merchant: readString(frontmatter.merchant),
+    recipient: readString(frontmatter.recipient),
+    sender: readString(frontmatter.sender),
+  });
   const smsMessage = readString(frontmatter.sms_message);
   const category = readString(frontmatter.category) || "Uncategorized";
   const fromAccount = readString(frontmatter.from_account);
@@ -60,7 +65,8 @@ export function buildTransaction(
     fromAccount,
     toAccount,
     category,
-    merchant,
+    counterparty,
+    counterpartyRole,
     type,
     status,
     source: readString(frontmatter.source),
@@ -71,8 +77,10 @@ export function buildTransaction(
     excludeReason: readString(frontmatter.exclude_reason),
     excludeSource,
     excludeRuleId: readString(frontmatter.exclude_rule_id),
-    searchBlob: [merchant, smsMessage, category, fromAccount, toAccount]
-      .filter(Boolean).join(" ").toLowerCase(),
+    // Whitespace is collapsed because a bank pads its messages with runs of
+    // spaces, and a search typed with single ones would otherwise miss them.
+    searchBlob: [counterparty, smsMessage, category, fromAccount, toAccount]
+      .filter(Boolean).join(" ").replace(/\s+/gu, " ").toLowerCase(),
   };
 }
 
@@ -121,7 +129,11 @@ const RECORD_KEYS: Record<string, keyof TransactionRecord> = {
   from_account: "fromAccount",
   to_account: "toAccount",
   category: "category",
-  merchant: "merchant",
+  // The three party keys are one field: a name already under any of them means
+  // the note names its party, so the parser leaves all three alone.
+  merchant: "counterparty",
+  recipient: "counterparty",
+  sender: "counterparty",
   transaction_type: "type",
   status: "status",
   parser_confidence: "parserConfidence",

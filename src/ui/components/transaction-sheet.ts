@@ -1,6 +1,7 @@
 import { Modal, Notice, Setting } from "obsidian";
 import type { App } from "obsidian";
 import { updateTransaction } from "../../data/write.ts";
+import { ROLE_LABELS, counterpartyFields, roleForType } from "../../domain/counterparty.ts";
 import { formatMoney } from "../format.ts";
 import type FinanceAutomationPlugin from "../../main.ts";
 import type { TransactionRecord, TransactionType } from "../../data/types.ts";
@@ -13,7 +14,7 @@ export class TransactionSheet extends Modal {
   private draft: {
     amount: string; currency: string; date: string; time: string;
     fromAccount: string; toAccount: string; category: string;
-    merchant: string; type: TransactionType;
+    counterparty: string; type: TransactionType;
     excluded: boolean; excludeReason: string;
   };
 
@@ -31,7 +32,7 @@ export class TransactionSheet extends Modal {
       fromAccount: record.fromAccount,
       toAccount: record.toAccount,
       category: record.category,
-      merchant: record.merchant,
+      counterparty: record.counterparty,
       type: record.type,
       excluded: record.excluded,
       excludeReason: record.excludeReason,
@@ -44,7 +45,7 @@ export class TransactionSheet extends Modal {
     contentEl.empty();
 
     contentEl.createEl("h2", {
-      text: this.record.merchant || this.record.category || "Transaction",
+      text: this.record.counterparty || this.record.category || "Transaction",
     });
 
     const accounts = this.plugin.index.accounts().map((account) => account.name).sort();
@@ -68,8 +69,10 @@ export class TransactionSheet extends Modal {
     new Setting(contentEl).setName("Type").addDropdown((dropdown) => {
       dropdown.addOption("", "Unknown");
       for (const [value, label] of Object.entries(TYPE_CHOICES)) dropdown.addOption(value, label);
-      dropdown.setValue(this.draft.type)
-        .onChange((value) => { this.draft.type = value as TransactionType; });
+      dropdown.setValue(this.draft.type).onChange((value) => {
+        this.draft.type = value as TransactionType;
+        partySetting.setName(ROLE_LABELS[roleForType(this.draft.type)]);
+      });
     });
 
     new Setting(contentEl).setName("Category").addDropdown((dropdown) => {
@@ -82,9 +85,15 @@ export class TransactionSheet extends Modal {
     this.accountSetting(contentEl, "From account", accounts, "fromAccount");
     this.accountSetting(contentEl, "To account", accounts, "toAccount");
 
-    new Setting(contentEl).setName("Merchant").addText((text) =>
-      text.setValue(this.draft.merchant).onChange((value) => { this.draft.merchant = value; }),
-    );
+    // One box for the other side of the transaction, labelled for the role the
+    // type implies. Saving moves the name to that role's key, so correcting a
+    // type from spending to income turns a merchant into a sender.
+    const partySetting = new Setting(contentEl)
+      .setName(ROLE_LABELS[roleForType(this.draft.type)])
+      .addText((text) =>
+        text.setValue(this.draft.counterparty)
+          .onChange((value) => { this.draft.counterparty = value; }),
+      );
 
     new Setting(contentEl)
       .setName("Exclude from calculations")
@@ -167,7 +176,7 @@ export class TransactionSheet extends Modal {
         from_account: this.draft.fromAccount,
         to_account: this.draft.toAccount,
         category: this.draft.category,
-        merchant: this.draft.merchant,
+        ...counterpartyFields(this.draft.counterparty, roleForType(this.draft.type)),
         transaction_type: this.draft.type,
         excluded: this.draft.excluded ? true : null,
         exclude_reason: this.draft.excluded ? (this.draft.excludeReason || "Excluded by hand") : null,

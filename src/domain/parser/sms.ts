@@ -1,6 +1,7 @@
 import { extractByPatterns, hasKeyword } from "./patterns.ts";
 import { categorize, type CategoryRules } from "../categorize.ts";
-import type { TransactionType } from "../../data/types.ts";
+import { cleanCounterpartyName, counterpartyFields, roleForType } from "../counterparty.ts";
+import type { AccountRecord, TransactionType } from "../../data/types.ts";
 
 export type { CategoryRules };
 
@@ -12,6 +13,10 @@ export interface SmsPatterns {
   amount_patterns?: string[];
   card_ending_patterns?: string[];
   merchant_patterns?: string[];
+  /** Who money was sent to, used for a transfer. */
+  recipient_patterns?: string[];
+  /** Who money came from, used for a credit. */
+  sender_patterns?: string[];
   /** Optional. Named groups: year, month, day, and optionally hour, minute, second. */
   date_patterns?: string[];
 }
@@ -26,7 +31,10 @@ export interface ParsedSms {
   from_account: string;
   to_account: string;
   category: string;
+  /** Exactly one of the three carries the party; see counterpartyFields. */
   merchant: string;
+  recipient: string;
+  sender: string;
   transaction_type: TransactionType;
   status: "parsed" | "needs_review";
   parser_confidence: number;
@@ -49,6 +57,71 @@ export function stableId(text: string): string {
     second = Math.imul(second ^ code, 0x85ebca6b) >>> 0;
   }
   return first.toString(16).padStart(8, "0") + second.toString(16).padStart(8, "0");
+}
+
+/**
+ * Pulls a party name out of the message. The capture is either a named group
+ * `name` or the first group, so a pattern written either way works.
+ */
+function extractParty(sms: string, patterns: string[] | undefined): string {
+  const match = extractByPatterns(sms, patterns);
+  if (!match) return "";
+  return cleanCounterpartyName(match.groups?.name ?? match[1] ?? "");
+}
+
+const uniqueStrings = (values: string[]): string[] => {
+  const found: string[] = [];
+  for (const value of values) {
+    const clean = String(value ?? "").trim();
+    if (clean && !found.includes(clean)) found.push(clean);
+  }
+  return found;
+};
+
+/**
+ * Merges the account notes in `Budget/Accounts/` over `Budget/Settings/accounts.json`
+ * so the notes are the single place card endings and aliases are maintained. The JSON
+ * file still works for an account that has no note yet. Entries are matched by name,
+ * case-insensitively, and their endings and aliases are unioned rather than replaced —
+ * an ending listed in either source resolves to the same account. Notes are listed
+ * first, which is what a transfer uses to pick the from-account.
+ */
+export function mergeAccountSources(notes: AccountRecord[], config: AccountConfig): AccountConfig {
+  const accounts: AccountConfig["accounts"] = [];
+  const positionOf = new Map<string, number>();
+
+  const add = (name: string, currency: string, endings: string[], aliases: string[]): void => {
+    const clean = String(name ?? "").trim();
+    if (!clean) return;
+    const key = clean.toLocaleLowerCase();
+    const at = positionOf.get(key);
+    if (at === undefined) {
+      positionOf.set(key, accounts.length);
+      accounts.push({
+        name: clean,
+        currency: currency || undefined,
+        card_endings: uniqueStrings(endings),
+        aliases: uniqueStrings(aliases),
+      });
+      return;
+    }
+    const entry = accounts[at]!;
+    if (!entry.currency && currency) entry.currency = currency;
+    entry.card_endings = uniqueStrings([...(entry.card_endings ?? []), ...endings]);
+    entry.aliases = uniqueStrings([...(entry.aliases ?? []), ...aliases]);
+  };
+
+  for (const note of notes) add(note.name, note.currency, note.cardEndings, note.aliases);
+  for (const entry of config.accounts ?? []) {
+    add(
+      String(entry.name ?? ""),
+      String(entry.currency ?? ""),
+      (entry.card_endings ?? []).map(String),
+      (entry.aliases ?? []).map(String),
+    );
+  }
+
+  return { accounts };
 }
 
 export function accountCandidates(sms: string, ending: string, accounts: AccountConfig): string[] {
@@ -90,8 +163,6 @@ export function parseSms(
   const endingMatch = extractByPatterns(sms, patterns.card_ending_patterns);
   const ending = endingMatch?.groups?.ending ?? "";
   const candidates = accountCandidates(sms, ending, accounts);
-  const merchant = extractByPatterns(sms, patterns.merchant_patterns)?.[1]?.trim() ?? "";
-
   const isTransfer = hasKeyword(sms, patterns.transfer_keywords);
   const isFee = hasKeyword(sms, patterns.fee_keywords);
   const isCredit = hasKeyword(sms, patterns.credit_keywords);
@@ -103,6 +174,19 @@ export function parseSms(
   else if (isCredit && !isDebit) transactionType = "credit";
   else if (isDebit && !isCredit) transactionType = "debit";
 
+  // The name the message carries is the same thing whichever direction the
+  // money went; only what to call it changes, and the type decides that. Each
+  // role falls back to the merchant patterns, because a bank writes a refund
+  // and a card purchase the same way.
+  const role = roleForType(transactionType);
+  const merchantName = extractParty(sms, patterns.merchant_patterns);
+  const counterparty =
+    role === "sender"
+      ? extractParty(sms, patterns.sender_patterns) || merchantName
+      : role === "recipient"
+        ? extractParty(sms, patterns.recipient_patterns) || merchantName
+        : merchantName || extractParty(sms, patterns.recipient_patterns);
+
   let fromAccount = "";
   let toAccount = "";
   if (transactionType === "debit" || transactionType === "fee") fromAccount = candidates[0] ?? "";
@@ -112,7 +196,7 @@ export function parseSms(
     toAccount = candidates[1] ?? "";
   }
 
-  let category = categorize(`${sms}\n${merchant}`, categories);
+  let category = categorize(`${sms}\n${counterparty}`, categories);
   if (transactionType === "fee") category = "Fees";
   else if (transactionType === "transfer" && category === "Uncategorized") category = "Transfer";
 
@@ -129,7 +213,7 @@ export function parseSms(
     from_account: fromAccount,
     to_account: toAccount,
     category,
-    merchant,
+    ...counterpartyFields(counterparty, role),
     transaction_type: transactionType,
     status: complete ? "parsed" : "needs_review",
     parser_confidence: confidence,

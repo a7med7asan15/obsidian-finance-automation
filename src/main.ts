@@ -8,6 +8,7 @@ import {
 } from "./constants.ts";
 import { registerFinanceCodeBlock } from "./codeblock.ts";
 import { TransactionIndex } from "./data/index-store.ts";
+import { createCategoryNote } from "./data/categories.ts";
 import { createRawSmsTransaction, createStructuredTransaction } from "./data/create.ts";
 import type { ProtocolParams } from "./data/create.ts";
 import { describeInbox, ingestInbox } from "./data/inbox.ts";
@@ -18,11 +19,14 @@ import { exportCsv } from "./ui/export-csv.ts";
 import { loadRules, loadVaultJson } from "./data/vault-json.ts";
 import { updateTransaction } from "./data/write.ts";
 import { resolveExclusion } from "./domain/exclusion.ts";
-import { parseSms } from "./domain/parser/sms.ts";
+import { mergeAccountSources, parseSms } from "./domain/parser/sms.ts";
+import { counterpartyFields, readCounterparty } from "./domain/counterparty.ts";
+import { withDefaultPatterns } from "./domain/parser/defaults.ts";
 import type { AccountConfig, CategoryRules, SmsPatterns } from "./domain/parser/sms.ts";
 import { DEFAULT_SETTINGS, FinanceAutomationSettingTab } from "./settings.ts";
 import { FilterStore } from "./store/filter-store.ts";
 import { BUDGET_VIEW_TYPE, BudgetView } from "./ui/budget-view.ts";
+import type { BudgetTab } from "./ui/budget-view.ts";
 import { AddTransactionModal } from "./ui/components/add-transaction-modal.ts";
 import { CategoryEditorModal } from "./ui/components/category-editor.ts";
 import { RulesEditorModal } from "./ui/components/rules-editor.ts";
@@ -111,6 +115,21 @@ export default class FinanceAutomationPlugin extends Plugin {
         const path = await exportCsv(this.app, records, periodLabel(this.store.get().period));
         new Notice(`Exported ${records.length} transactions to ${path}.`);
       },
+    });
+
+    this.addCommand({
+      id: "fill-counterparties",
+      name: "Fill in missing merchants from stored messages",
+      callback: async () => {
+        const updated = await this.fillMissingCounterparties();
+        new Notice(`Finance: named the other side of ${updated} transaction(s).`, 6000);
+      },
+    });
+
+    this.addCommand({
+      id: "list-merchants",
+      name: "List merchants, recipients and senders",
+      callback: () => void this.activateBudgetView().then(() => this.showBudgetTab("merchants")),
     });
 
     this.addCommand({
@@ -204,11 +223,15 @@ export default class FinanceAutomationPlugin extends Plugin {
     }
   }
 
-  showTransactionsTab(): void {
+  showBudgetTab(tab: BudgetTab): void {
     for (const leaf of this.app.workspace.getLeavesOfType(BUDGET_VIEW_TYPE)) {
       const view = leaf.view;
-      if (view instanceof BudgetView) view.showTab("transactions");
+      if (view instanceof BudgetView) view.showTab(tab);
     }
+  }
+
+  showTransactionsTab(): void {
+    this.showBudgetTab("transactions");
   }
 
   openTransactionSheet(record: TransactionRecord): void {
@@ -259,8 +282,13 @@ export default class FinanceAutomationPlugin extends Plugin {
     return inbox.created.length;
   }
 
+  /**
+   * The vault's patterns, topped up with the built-in ones for the party a
+   * message names. The vault's own entries are tried first, so nothing written
+   * by hand is overruled.
+   */
   private async loadPatterns(): Promise<SmsPatterns> {
-    return loadVaultJson<SmsPatterns>(this.app, SMS_PATTERNS_PATH, {});
+    return withDefaultPatterns(await loadVaultJson<SmsPatterns>(this.app, SMS_PATTERNS_PATH, {}));
   }
 
   private queueAutomaticRun(): void {
@@ -313,13 +341,58 @@ export default class FinanceAutomationPlugin extends Plugin {
     }
   }
 
-  async processPending(): Promise<number> {
-    const [config, patterns, accounts, categories] = await Promise.all([
+  /** Everything the parser reads, gathered the same way for every caller. */
+  private async loadParserInputs(): Promise<{
+    config: VaultConfig;
+    patterns: SmsPatterns;
+    accounts: AccountConfig;
+    categories: CategoryRules;
+  }> {
+    const [config, patterns, accountsJson, categories] = await Promise.all([
       loadVaultJson<VaultConfig>(this.app, CONFIG_PATH, { default_currency: "EGP" }),
       this.loadPatterns(),
       loadVaultJson<AccountConfig>(this.app, ACCOUNTS_JSON_PATH, { accounts: [] }),
       loadVaultJson<CategoryRules>(this.app, CATEGORY_RULES_PATH, { rules: [] }),
     ]);
+    // The account notes are the source of truth for card endings and aliases;
+    // accounts.json only covers accounts that have no note yet.
+    return {
+      config,
+      patterns,
+      accounts: mergeAccountSources(this.index.accounts(), accountsJson),
+      categories,
+    };
+  }
+
+  /**
+   * Reads the merchant, recipient or sender out of the stored message of every
+   * transaction that names nobody yet.
+   *
+   * A note that reached `parsed` is never parsed again, so transactions filed
+   * before the parser learned a wording keep their empty party key forever.
+   * This is the catch-up pass, and it only ever fills a blank: a name already
+   * in the note, typed or parsed, is left exactly as it is.
+   */
+  async fillMissingCounterparties(): Promise<number> {
+    const { config, patterns, accounts, categories } = await this.loadParserInputs();
+
+    let updated = 0;
+    for (const record of this.index.transactions()) {
+      if (record.counterparty || !record.smsMessage) continue;
+      const parsed = parseSms(record.smsMessage, record.timestamp, config, patterns, accounts, categories);
+      const { counterparty, counterpartyRole } = readCounterparty(parsed);
+      if (!counterparty) continue;
+      this.ignoreWatchUntil.set(record.path, Date.now() + 2000);
+      await updateTransaction(
+        this.app, record.path, counterpartyFields(counterparty, counterpartyRole),
+      );
+      updated += 1;
+    }
+    return updated;
+  }
+
+  async processPending(): Promise<number> {
+    const { config, patterns, accounts, categories } = await this.loadParserInputs();
     const { rules } = await loadRules(this.app);
 
     let updated = 0;
@@ -343,6 +416,37 @@ export default class FinanceAutomationPlugin extends Plugin {
       updated += 1;
     }
     return updated;
+  }
+
+  /**
+   * Writes a new category note and answers with its path. It borrows the
+   * currency of the categories already there, since a vault that budgets in one
+   * currency almost never gains a second.
+   */
+  async createCategory(name: string): Promise<string> {
+    const currency = this.index.categories()[0]?.currency ?? "EGP";
+    const path = await createCategoryNote(this.app, {
+      name, currency, color: null, icon: null, monthlyBudget: null,
+    });
+    // metadataCache has not necessarily seen a file created this same tick.
+    this.index.refreshPath(path);
+    return path;
+  }
+
+  /**
+   * Files every transaction of one category under another, and answers with how
+   * many moved. The writes are hidden from the watcher: re-filing a transaction
+   * changes nothing the parser would want to look at again.
+   */
+  async recategorize(from: string, to: string): Promise<number> {
+    let moved = 0;
+    for (const record of this.index.transactions()) {
+      if (record.category !== from) continue;
+      this.ignoreWatchUntil.set(record.path, Date.now() + 2000);
+      await updateTransaction(this.app, record.path, { category: to });
+      moved += 1;
+    }
+    return moved;
   }
 
   async applyRulesToAll(): Promise<number> {

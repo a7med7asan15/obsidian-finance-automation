@@ -12,7 +12,8 @@ test("the header lists every exported column", () => {
   const [header] = toCsv([]).split("\n");
   assert.equal(
     header,
-    "date,time,amount,currency,type,from_account,to_account,merchant,category,status,excluded,exclude_reason,transaction_id,file",
+    "date,time,amount,currency,type,from_account,to_account,counterparty,counterparty_role," +
+      "category,status,excluded,exclude_reason,transaction_id,file",
   );
 });
 
@@ -21,14 +22,21 @@ test("a row carries the record's values", () => {
     timestamp: "2026-09-05T14:35:00+03:00", amount: 1420.5, merchant: "Carrefour",
   })]);
   const [, row] = csv.split("\n");
-  assert.ok(row.startsWith("2026-09-05,14:35,1420.5,EGP,debit,CIB,,Carrefour,Groceries,parsed,false,,"));
+  assert.ok(
+    row.startsWith("2026-09-05,14:35,1420.5,EGP,debit,CIB,,Carrefour,merchant,Groceries,parsed,false,,"),
+    row,
+  );
 });
 
 test("values containing a comma, a quote or a newline are quoted", () => {
   const csv = toCsv([makeTransaction({ merchant: 'Al "Mahdi", Maadi' })]);
   assert.ok(csv.includes('"Al ""Mahdi"", Maadi"'));
 
-  const multiline = toCsv([makeTransaction({ merchant: "line one\nline two" })]);
+  // A counterparty cannot hold a newline — it is folded away as the note is
+  // read — so a free-text field carries this half of the test.
+  const multiline = toCsv([makeTransaction({
+    excluded: true, exclude_reason: "line one\nline two",
+  })]);
   assert.ok(multiline.includes('"line one\nline two"'));
 });
 

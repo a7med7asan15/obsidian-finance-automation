@@ -1,4 +1,11 @@
 export type TransactionType = "debit" | "credit" | "transfer" | "fee" | "";
+/**
+ * Who the money met. The three names are also the frontmatter keys a
+ * transaction note stores the party under, so a role is never written down
+ * separately: `merchant` for a purchase, `recipient` for money sent, `sender`
+ * for money received. An empty role means the note names no party at all.
+ */
+export type CounterpartyRole = "merchant" | "recipient" | "sender" | "";
 export type TransactionStatus = "pending" | "parsed" | "needs_review";
 export type ExcludeSource = "manual" | "rule" | null;
 
@@ -19,7 +26,9 @@ export interface TransactionRecord {
   fromAccount: string;
   toAccount: string;
   category: string;
-  merchant: string;
+  /** The merchant, recipient or sender — whichever of the three the note names. */
+  counterparty: string;
+  counterpartyRole: CounterpartyRole;
   type: TransactionType;
   status: TransactionStatus;
   source: string;
@@ -30,7 +39,7 @@ export interface TransactionRecord {
   excludeReason: string;
   excludeSource: ExcludeSource;
   excludeRuleId: string;
-  /** Lower-cased merchant + sms + category + accounts, for substring search. */
+  /** Lower-cased counterparty + sms + category + accounts, for substring search. */
   searchBlob: string;
 }
 

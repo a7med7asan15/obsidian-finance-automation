@@ -7,7 +7,8 @@ export function applyFilter(
   today: string,
 ): TransactionRecord[] {
   const range = resolvePeriod(filter.period, today);
-  const search = filter.search.trim().toLowerCase();
+  // Collapsed the same way searchBlob is, so the two agree.
+  const search = filter.search.trim().replace(/\s+/gu, " ").toLowerCase();
   const categories = new Set(filter.categories);
   const accounts = new Set(filter.accounts);
   const types = new Set(filter.types);

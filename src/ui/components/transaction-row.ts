@@ -30,7 +30,7 @@ export class TransactionRow {
 
     // --- text ---
     const text = row.createDiv({ cls: "fin-row-text" });
-    const primary = record.merchant || record.category || record.type || "Transaction";
+    const primary = record.counterparty || record.category || record.type || "Transaction";
     text.createDiv({ cls: "fin-row-primary", text: primary });
 
     const secondaryParts = [

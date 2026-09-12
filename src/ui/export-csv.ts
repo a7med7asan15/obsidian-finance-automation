@@ -5,7 +5,7 @@ import type { TransactionRecord } from "../data/types.ts";
 
 const COLUMNS = [
   "date", "time", "amount", "currency", "type", "from_account", "to_account",
-  "merchant", "category", "status", "excluded", "exclude_reason", "transaction_id", "file",
+  "counterparty", "counterparty_role", "category", "status", "excluded", "exclude_reason", "transaction_id", "file",
 ] as const;
 
 function cell(value: unknown): string {
@@ -24,7 +24,8 @@ export function toCsv(records: TransactionRecord[]): string {
       record.type,
       record.fromAccount,
       record.toAccount,
-      record.merchant,
+      record.counterparty,
+      record.counterpartyRole,
       record.category,
       record.status,
       record.excluded,
