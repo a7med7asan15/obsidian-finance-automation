@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildTransaction, buildAccount, buildCategory, isTransactionPath } from "../src/data/records.ts";
+import { buildTransaction, buildAccount, buildCategory, isTransactionPath, parserChanges } from "../src/data/records.ts";
 
 test("buildTransaction maps every field and derives date parts", () => {
   const record = buildTransaction({
@@ -129,4 +129,76 @@ test("isTransactionPath accepts transaction notes and rejects the README", () =>
   assert.equal(isTransactionPath("Budget/Transactions/README.md"), false);
   assert.equal(isTransactionPath("Budget/Accounts/CIB.md"), false);
   assert.equal(isTransactionPath("Budget/Transactions/2026/Aug/notes.txt"), false);
+});
+
+test("parserChanges fills empty fields and the parser-owned keys", () => {
+  const record = buildTransaction(
+    {
+      timestamp: "2026-09-11T20:15:09.203Z",
+      sms_message: "تم خصم EGP 350.00",
+      category: "Uncategorized",
+      status: "needs_review",
+      parser_confidence: 0,
+      transaction_id: "aee0fb590d45575d",
+    },
+    "Budget/Transactions/2026/Sep/11T20-15-09.md",
+  );
+
+  const changes = parserChanges(record, {
+    amount: 350,
+    currency: "EGP",
+    category: "Dining",
+    status: "parsed",
+    parser_confidence: 1,
+    transaction_id: "aee0fb590d45575d",
+  });
+
+  assert.deepEqual(changes, {
+    amount: 350,
+    currency: "EGP",
+    category: "Dining",
+    status: "parsed",
+    parser_confidence: 1,
+  });
+});
+
+test("parserChanges never rewrites a field with the value it already holds", () => {
+  // A needs_review note is reparsed on every pass, and a frontmatter write fires
+  // the modify event that schedules the next one. Identical values counting as
+  // changes is what let such a note rewrite itself without end.
+  const frontmatter = {
+    timestamp: "2026-09-11T19:14:11.222Z",
+    sms_message: "تم",
+    category: "Uncategorized",
+    status: "needs_review",
+    parser_confidence: 0,
+    transaction_id: "f36041700d000314",
+  };
+  const record = buildTransaction(frontmatter, "Budget/Transactions/2026/Sep/11T19-14-11.md");
+
+  const parsed = {
+    amount: null,
+    currency: "",
+    from_account: "",
+    to_account: "",
+    category: "Uncategorized",
+    merchant: "",
+    transaction_type: "",
+    status: "needs_review",
+    parser_confidence: 0,
+    transaction_id: "f36041700d000314",
+  };
+
+  assert.deepEqual(parserChanges(record, parsed), {});
+});
+
+test("parserChanges keeps a value set by hand", () => {
+  const record = buildTransaction(
+    { timestamp: "2026-09-11T19:14:11.222Z", merchant: "Cancun Resort", category: "Dining", status: "needs_review" },
+    "Budget/Transactions/2026/Sep/11T19-14-11.md",
+  );
+
+  const changes = parserChanges(record, { merchant: "CANCUN RESORT   SPA", category: "Uncategorized" });
+
+  assert.deepEqual(changes, {});
 });

@@ -132,3 +132,40 @@ const RECORD_KEYS: Record<string, keyof TransactionRecord> = {
 export function toRecordKey(frontmatterKey: string): keyof TransactionRecord | null {
   return RECORD_KEYS[frontmatterKey] ?? null;
 }
+
+/** Keys the parser owns outright, overwriting whatever a note already has. */
+const PARSER_OWNED = new Set(["status", "parser_confidence", "transaction_id"]);
+
+/** An absent key, an empty string and a null all mean the same thing in frontmatter. */
+function isEmpty(value: unknown): boolean {
+  return value === null || value === undefined || value === "";
+}
+
+/**
+ * The parser fills only empty fields; anything set by hand wins, and the three
+ * parser-owned keys are rewritten from the message every time.
+ *
+ * A value equal to the one the note already holds is not a change. That matters
+ * because a note only stops being reparsed once it reaches `parsed`: a
+ * `needs_review` note is parsed again on every pass, and writing its frontmatter
+ * fires the same `modify` event the watcher uses to schedule the next pass. With
+ * identical values still counted as changes, such a note rewrote itself for as
+ * long as the vault stayed open.
+ */
+export function parserChanges(
+  record: TransactionRecord,
+  // Any parse result: the keys that are not frontmatter keys are dropped below.
+  parsed: object,
+): Record<string, unknown> {
+  const changes: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(parsed)) {
+    const recordKey = toRecordKey(key);
+    if (!recordKey) continue;
+    const current = record[recordKey] as unknown;
+    const isDefault = key === "category" && current === "Uncategorized";
+    if (!PARSER_OWNED.has(key) && !isDefault && !isEmpty(current)) continue;
+    if (current === value || (isEmpty(current) && isEmpty(value))) continue;
+    changes[key] = value;
+  }
+  return changes;
+}

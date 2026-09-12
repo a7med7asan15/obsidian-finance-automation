@@ -9,7 +9,7 @@ import { registerFinanceCodeBlock } from "./codeblock.ts";
 import { TransactionIndex } from "./data/index-store.ts";
 import { createRawSmsTransaction, createStructuredTransaction } from "./data/create.ts";
 import type { ProtocolParams } from "./data/create.ts";
-import { isTransactionPath, toRecordKey } from "./data/records.ts";
+import { isTransactionPath, parserChanges } from "./data/records.ts";
 import { applyFilter } from "./domain/filter.ts";
 import { cairoToday, periodLabel } from "./domain/dates.ts";
 import { exportCsv } from "./ui/export-csv.ts";
@@ -29,9 +29,6 @@ import type { TransactionRecord } from "./data/types.ts";
 import type { FinanceSettings } from "./settings.ts";
 
 const SMS_PATTERNS_PATH = `${SETTINGS_DIR}/sms_patterns.json`;
-
-/** Keys the parser owns outright, overwriting whatever a note already has. */
-const PARSER_OWNED = new Set(["status", "parser_confidence", "transaction_id"]);
 
 interface VaultConfig {
   default_currency?: string;
@@ -289,21 +286,12 @@ export default class FinanceAutomationPlugin extends Plugin {
 
     let updated = 0;
     for (const record of this.index.transactions()) {
-      const changes: Record<string, unknown> = {};
+      let changes: Record<string, unknown> = {};
 
       const needsParsing = record.status !== "parsed" && Boolean(record.smsMessage);
       if (needsParsing) {
         const parsed = parseSms(record.smsMessage, record.timestamp, config, patterns, accounts, categories);
-        // The parser fills only empty fields; anything set by hand wins.
-        for (const [key, value] of Object.entries(parsed)) {
-          const recordKey = toRecordKey(key);
-          if (!recordKey) continue;
-          const current = (record as unknown as Record<string, unknown>)[recordKey];
-          const isDefault = key === "category" && current === "Uncategorized";
-          if (PARSER_OWNED.has(key) || isDefault || current === null || current === "") {
-            changes[key] = value;
-          }
-        }
+        changes = parserChanges(record, parsed);
       }
 
       if (this.settings.applyExclusionRules) {

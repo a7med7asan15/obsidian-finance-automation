@@ -639,6 +639,23 @@ var RECORD_KEYS = {
 function toRecordKey(frontmatterKey) {
   return RECORD_KEYS[frontmatterKey] ?? null;
 }
+var PARSER_OWNED = /* @__PURE__ */ new Set(["status", "parser_confidence", "transaction_id"]);
+function isEmpty(value) {
+  return value === null || value === void 0 || value === "";
+}
+function parserChanges(record, parsed) {
+  const changes = {};
+  for (const [key2, value] of Object.entries(parsed)) {
+    const recordKey = toRecordKey(key2);
+    if (!recordKey) continue;
+    const current = record[recordKey];
+    const isDefault = key2 === "category" && current === "Uncategorized";
+    if (!PARSER_OWNED.has(key2) && !isDefault && !isEmpty(current)) continue;
+    if (current === value || isEmpty(current) && isEmpty(value)) continue;
+    changes[key2] = value;
+  }
+  return changes;
+}
 
 // src/data/index-store.ts
 var TransactionIndex = class {
@@ -3259,7 +3276,6 @@ var TransactionSheet = class extends import_obsidian18.Modal {
 
 // src/main.ts
 var SMS_PATTERNS_PATH = `${SETTINGS_DIR}/sms_patterns.json`;
-var PARSER_OWNED = /* @__PURE__ */ new Set(["status", "parser_confidence", "transaction_id"]);
 var FinanceAutomationPlugin = class extends import_obsidian19.Plugin {
   constructor() {
     super(...arguments);
@@ -3465,19 +3481,11 @@ var FinanceAutomationPlugin = class extends import_obsidian19.Plugin {
     const { rules } = await loadRules(this.app);
     let updated = 0;
     for (const record of this.index.transactions()) {
-      const changes = {};
+      let changes = {};
       const needsParsing = record.status !== "parsed" && Boolean(record.smsMessage);
       if (needsParsing) {
         const parsed = parseSms(record.smsMessage, record.timestamp, config, patterns, accounts, categories);
-        for (const [key2, value] of Object.entries(parsed)) {
-          const recordKey = toRecordKey(key2);
-          if (!recordKey) continue;
-          const current = record[recordKey];
-          const isDefault = key2 === "category" && current === "Uncategorized";
-          if (PARSER_OWNED.has(key2) || isDefault || current === null || current === "") {
-            changes[key2] = value;
-          }
-        }
+        changes = parserChanges(record, parsed);
       }
       if (this.settings.applyExclusionRules) {
         const exclusion = resolveExclusion(record, rules);
