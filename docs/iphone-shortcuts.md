@@ -1,14 +1,59 @@
 # iPhone Shortcuts
 
-Two ways in, one for each situation:
+Three ways in, one for each situation:
 
-| Way | URL | You provide |
+| Way | How it travels | You provide |
 |---|---|---|
-| **SMS** — automatic, for bank messages | `obsidian://finance-sms` | nothing but the message text |
+| **Inbox** — automatic, recommended for bank messages | a file in `Budget/Inbox` | nothing but the message text |
+| **SMS link** — automatic, for short messages only | `obsidian://finance-sms` | nothing but the message text |
 | **Manual** — you tap it, for cash and anything with no SMS | `obsidian://finance-transaction` | the details, through prompts and dropdowns |
+
+**Start with the inbox for bank SMS.** A link carries the message inside a URL, and that
+has two ceilings nothing downstream can work around: iOS drops the link entirely when it
+is the thing that launches Obsidian, and a long encoded message stops arriving at all. The
+inbox has neither problem — see [The inbox way](#0-the-inbox-way-recommended) — and is the
+only capture that cannot be lost while the app is closed.
 
 Enable Finance Automation and restart Obsidian once before using either link, so the URL
 handlers are registered.
+
+---
+
+## 0. The inbox way (recommended)
+
+The automation saves the message as a file inside the vault. Nothing opens, nothing has to
+be running, and there is no length limit — a file is a file. Obsidian turns every waiting
+message into a transaction the next time it opens, and the phone can be asleep in between.
+
+### Build it — four actions
+
+1. Open **Shortcuts → Automation → +** and choose **Message**.
+2. Tap **Sender** and pick the bank's sender name or number, then **Run Immediately →
+   Next → New Blank Automation**.
+3. Add **Text** and insert the **Shortcut Input** variable as its whole content. No URL
+   encoding, no brackets, nothing else — the file holds the message exactly as it arrived.
+4. Add **Save File**:
+   - **Service**: On My iPhone
+   - **Destination**: `Obsidian/⟨your vault⟩/Budget/Inbox`
+   - turn **Ask Where to Save** *off*
+   - leave **Overwrite If File Exists** off, so two messages in the same minute both survive
+5. Tap **Done**.
+
+Create the `Budget/Inbox` folder once from Obsidian, or from the Files app, before the
+first run. Any `.txt`, `.md`, `.text` or `.log` file in it is treated as one message.
+
+### What happens next
+
+Obsidian reads the inbox on startup — even with **Run on startup** turned off, because
+capturing a message is not the same as processing one — and on every processing pass. Each
+file becomes a note with `status: pending` and the message in `sms_message` and the
+**Original SMS** block, then the parser fills in the rest exactly as it does for a link.
+The file is deleted only after its note is on disk, so a capture is never consumed without
+a note to show for it. An empty file is left alone, and a file whose note could not be
+written stays put for the next pass.
+
+To pull the inbox in by hand, run **Import messages from the SMS inbox** from the command
+palette.
 
 ---
 
@@ -172,7 +217,9 @@ safe as long as you write their spaces as `%20`.
 
 | Symptom | Cause |
 |---|---|
+| **Black screen and no note, only from the Shortcut** | The link is too long, or it is the thing launching Obsidian. Obsidian never reads the URL iOS launched it with, and a long encoded message stops arriving. Use the inbox. |
 | Nothing happens when the link opens | Plugin not enabled, or Obsidian not restarted since installing it |
+| Inbox file never becomes a note | The file has an extension other than `.txt`, `.md`, `.text` or `.log`, or Save File wrote it outside `Budget/Inbox` |
 | Note appears but stays `pending` | Processing has not run yet; run **Process pending SMS transactions** |
 | `needs_review` with no account | The card digits are missing from `card_endings`, or the bank's wording is not in `card_ending_patterns` |
 | SMS note holds only the first word | The automation has no **URL Encode** action, so a space ended the link |

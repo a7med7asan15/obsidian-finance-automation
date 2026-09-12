@@ -1,7 +1,7 @@
 {
   "id": "finance-automation",
   "name": "Finance Automation",
-  "version": "3.0.2",
+  "version": "3.1.0",
   "minAppVersion": "1.7.0",
   "description": "Process finance SMS notes and generate reports with one cross-platform engine for mobile and desktop.",
   "author": "Ahmed Hassan",

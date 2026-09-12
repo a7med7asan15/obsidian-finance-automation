@@ -7,7 +7,7 @@ Finance Automation parses SMS transaction notes into structured frontmatter usin
 - Processes pending transaction notes when Obsidian starts.
 - Processes pending notes shortly after a transaction note is created or changed.
 - Parses configurable English and Arabic SMS patterns.
-- Captures a bank SMS from an iPhone automation through an `obsidian://` link — the message alone — and derives every field from it in the vault.
+- Captures a bank SMS from an iPhone automation, either as a file dropped in `Budget/Inbox` or through an `obsidian://` link — the message alone — and derives every field from it in the vault. The inbox is the reliable one: a link cannot carry a long message and is lost when it is what launches Obsidian.
 - Captures a manual transaction from a tap-to-fill Shortcut for cash and anything with no SMS.
 - Applies exclusion rules, which a manual decision always overrides.
 - Shows a spinning ribbon icon while processing.

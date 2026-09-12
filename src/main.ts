@@ -3,12 +3,14 @@ import {
   ACCOUNTS_JSON_PATH,
   CATEGORY_RULES_PATH,
   CONFIG_PATH,
+  INBOX_DIR,
   SETTINGS_DIR,
 } from "./constants.ts";
 import { registerFinanceCodeBlock } from "./codeblock.ts";
 import { TransactionIndex } from "./data/index-store.ts";
 import { createRawSmsTransaction, createStructuredTransaction } from "./data/create.ts";
 import type { ProtocolParams } from "./data/create.ts";
+import { describeInbox, ingestInbox } from "./data/inbox.ts";
 import { isTransactionPath, parserChanges } from "./data/records.ts";
 import { applyFilter } from "./domain/filter.ts";
 import { cairoToday, periodLabel } from "./domain/dates.ts";
@@ -86,6 +88,16 @@ export default class FinanceAutomationPlugin extends Plugin {
     });
 
     this.addCommand({
+      id: "import-sms-inbox",
+      name: "Import messages from the SMS inbox",
+      callback: async () => {
+        const captured = await this.captureInbox();
+        if (captured) void this.runFinance(false);
+        else new Notice(`Finance: no messages waiting in ${INBOX_DIR}.`);
+      },
+    });
+
+    this.addCommand({
       id: "add-transaction",
       name: "Add transaction",
       callback: () => this.openAddTransactionModal(),
@@ -150,9 +162,14 @@ export default class FinanceAutomationPlugin extends Plugin {
       this.registerEvent(this.app.vault.on("create", queueIfTransaction));
       this.registerEvent(this.app.vault.on("modify", queueIfTransaction));
 
-      if (this.settings.runOnStartup) {
-        this.startupTimer = window.setTimeout(() => void this.runFinance(false), 1500);
-      }
+      // A message that landed while the app was closed is read at startup even
+      // when automatic processing is off: the inbox is how a capture arrives,
+      // not a form of processing. Parsing it is the only thing that makes it a
+      // transaction, so a capture earns a pass of its own either way.
+      this.startupTimer = window.setTimeout(() => void (async () => {
+        const captured = await this.captureInbox();
+        if (this.settings.runOnStartup || captured) await this.runFinance(false);
+      })(), 1500);
     });
   }
 
@@ -224,6 +241,24 @@ export default class FinanceAutomationPlugin extends Plugin {
     }
   }
 
+  /**
+   * Drains `Budget/Inbox` into transaction notes and reports what happened.
+   *
+   * Returns the number captured; a caller that gets a non-zero answer owes the
+   * new notes a parsing pass. The index is nudged for each one because
+   * metadataCache has not necessarily seen a file this same tick.
+   */
+  private async captureInbox(): Promise<number> {
+    const inbox = await ingestInbox(this.app, await this.loadPatterns());
+    for (const failure of inbox.failed) {
+      console.error("Finance inbox capture failed", failure.path, failure.error);
+    }
+    const summary = describeInbox(inbox);
+    if (summary) new Notice(`Finance: ${summary}.`, 6000);
+    for (const path of inbox.created) this.index.refreshPath(path);
+    return inbox.created.length;
+  }
+
   private async loadPatterns(): Promise<SmsPatterns> {
     return loadVaultJson<SmsPatterns>(this.app, SMS_PATTERNS_PATH, {});
   }
@@ -259,6 +294,9 @@ export default class FinanceAutomationPlugin extends Plugin {
     this.setStatus("running…");
     if (showNotice) new Notice("Finance: processing…");
     try {
+      // Whatever the inbox holds becomes a note before the parsing pass, so a
+      // capture and its parse land in the same run.
+      if (await this.captureInbox()) this.queued = true;
       const updated = await this.processPending();
       this.setStatus("ready");
       if (showNotice) new Notice(`Finance: updated ${updated} transaction(s).`, 6000);
