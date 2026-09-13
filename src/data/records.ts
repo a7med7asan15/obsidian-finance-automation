@@ -1,4 +1,5 @@
 import { readBoolean, readNumber, readString, readStringList } from "./frontmatter.ts";
+import { isPlaceholderAccount } from "../domain/parser/sms.ts";
 import { toDateParts } from "../domain/dates.ts";
 import { readCounterparty } from "../domain/counterparty.ts";
 import { TRANSACTIONS_DIR } from "../constants.ts";
@@ -174,8 +175,15 @@ export function parserChanges(
     const recordKey = toRecordKey(key);
     if (!recordKey) continue;
     const current = record[recordKey] as unknown;
-    const isDefault = key === "category" && current === "Uncategorized";
+    // A stand-in card name and "Uncategorized" are both what the parser writes
+    // when it knows nothing; neither is an answer worth keeping, so a later
+    // pass that does know better replaces them.
+    const isDefault =
+      (key === "category" && current === "Uncategorized") ||
+      ((key === "from_account" || key === "to_account") && isPlaceholderAccount(current));
     if (!PARSER_OWNED.has(key) && !isDefault && !isEmpty(current)) continue;
+    // A default is replaced by an answer, never by the absence of one.
+    if (isDefault && isEmpty(value)) continue;
     if (current === value || (isEmpty(current) && isEmpty(value))) continue;
     changes[key] = value;
   }

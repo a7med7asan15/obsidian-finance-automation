@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   parseSms, stableId, normalizeCurrency, extractTimestamp, mergeAccountSources,
+  isPlaceholderAccount, placeholderAccount,
 } from "../src/domain/parser/sms.ts";
 import { buildAccount } from "../src/data/records.ts";
 import { categorize } from "../src/domain/categorize.ts";
@@ -322,4 +323,19 @@ test("money out of your account is spending, whichever wording the bank used", (
 test("a transfer out of your account stays a transfer, not spending", () => {
   const result = withDefaults("تم تحويل مبلغ 500 جم من حسابك بطاقة 0774", ARABIC_PATTERNS);
   assert.equal(result.transaction_type, "transfer");
+});
+
+test("a stand-in card name is not counted as an account the vault knows", () => {
+  const known = parse("Card 0774 purchase amount EGP 100 at Carrefour");
+  const unknown = parse("Card 9999 purchase amount EGP 100 at Carrefour");
+
+  assert.equal(unknown.from_account, "Card ••••9999");
+  assert.ok(unknown.parser_confidence < known.parser_confidence);
+});
+
+test("isPlaceholderAccount tells a stand-in card name from a real account", () => {
+  assert.equal(isPlaceholderAccount(placeholderAccount("0779")), true);
+  assert.equal(isPlaceholderAccount("Card ••••0779"), true);
+  assert.equal(isPlaceholderAccount("CIB"), false);
+  assert.equal(isPlaceholderAccount(""), false);
 });

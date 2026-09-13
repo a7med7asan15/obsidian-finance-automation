@@ -259,3 +259,29 @@ test("parserChanges fills the party key the parser chose when the note names nob
 
   assert.deepEqual(changes, { recipient: "Ahmed Hassan" });
 });
+
+test("parserChanges replaces a stand-in card name once an account claims the ending", () => {
+  const record = buildTransaction(
+    {
+      timestamp: "2026-09-13T20:18:31.852Z",
+      from_account: "Card ••••0779",
+      transaction_type: "debit",
+      status: "parsed",
+    },
+    "Budget/Transactions/2026/Sep/13T20-18-31-4.md",
+  );
+
+  const changes = parserChanges(record, { from_account: "CIB", to_account: "" });
+
+  assert.deepEqual(changes, { from_account: "CIB" });
+});
+
+test("parserChanges keeps a stand-in card name when the ending is still unknown", () => {
+  const record = buildTransaction(
+    { timestamp: "2026-09-13T20:18:31.852Z", from_account: "Card ••••0779", status: "parsed" },
+    "Budget/Transactions/2026/Sep/13T20-18-31-4.md",
+  );
+
+  assert.deepEqual(parserChanges(record, { from_account: "Card ••••0779" }), {});
+  assert.deepEqual(parserChanges(record, { from_account: "" }), {});
+});

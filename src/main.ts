@@ -19,7 +19,7 @@ import { exportCsv } from "./ui/export-csv.ts";
 import { loadRules, loadVaultJson } from "./data/vault-json.ts";
 import { updateTransaction } from "./data/write.ts";
 import { resolveExclusion } from "./domain/exclusion.ts";
-import { mergeAccountSources, parseSms } from "./domain/parser/sms.ts";
+import { isPlaceholderAccount, mergeAccountSources, parseSms } from "./domain/parser/sms.ts";
 import { counterpartyFields, readCounterparty } from "./domain/counterparty.ts";
 import { sameName } from "./domain/names.ts";
 import { withDefaultPatterns } from "./domain/parser/defaults.ts";
@@ -399,7 +399,15 @@ export default class FinanceAutomationPlugin extends Plugin {
     for (const record of this.index.transactions()) {
       let changes: Record<string, unknown> = {};
 
-      const needsParsing = record.status !== "parsed" && Boolean(record.smsMessage);
+      // A note filed under a stand-in card name is parsed again even though it
+      // reached `parsed`: the ending was unknown at the time, and listing it on
+      // an account note is what makes the answer available. Nothing is written
+      // while the ending stays unknown, because the parse returns the same
+      // stand-in the note already holds.
+      const provisional =
+        isPlaceholderAccount(record.fromAccount) || isPlaceholderAccount(record.toAccount);
+      const needsParsing =
+        (record.status !== "parsed" || provisional) && Boolean(record.smsMessage);
       if (needsParsing) {
         const parsed = parseSms(record.smsMessage, record.timestamp, config, patterns, accounts, categories);
         changes = parserChanges(record, parsed);

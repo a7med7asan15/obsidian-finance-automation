@@ -124,6 +124,20 @@ export function mergeAccountSources(notes: AccountRecord[], config: AccountConfi
   return { accounts };
 }
 
+/**
+ * The stand-in an ending no account claims is filed under, so a transaction
+ * still names the card it came from. It is provisional: a later pass replaces
+ * it the moment an account note lists the ending.
+ */
+export function placeholderAccount(ending: string): string {
+  return `Card ••••${ending}`;
+}
+
+/** Whether an account name is one of those stand-ins rather than a real account. */
+export function isPlaceholderAccount(value: unknown): boolean {
+  return /^Card ••••[0-9]+$/u.test(String(value ?? "").trim());
+}
+
 export function accountCandidates(sms: string, ending: string, accounts: AccountConfig): string[] {
   const folded = sms.toLocaleLowerCase();
   const found: string[] = [];
@@ -139,7 +153,7 @@ export function accountCandidates(sms: string, ending: string, accounts: Account
       found.push(name);
     }
   }
-  if (!found.length && ending) found.push(`Card ••••${ending}`);
+  if (!found.length && ending) found.push(placeholderAccount(ending));
   return found;
 }
 
@@ -200,7 +214,11 @@ export function parseSms(
   if (transactionType === "fee") category = "Fees";
   else if (transactionType === "transfer" && category === "Uncategorized") category = "Transfer";
 
-  const checks = [amount !== null, Boolean(currency), Boolean(transactionType), candidates.length > 0];
+  // A stand-in card name is not an account the vault knows, so it does not
+  // count towards confidence: a note filed under one is still waiting for the
+  // ending to be listed on an account note.
+  const resolved = candidates.some((candidate) => !isPlaceholderAccount(candidate));
+  const checks = [amount !== null, Boolean(currency), Boolean(transactionType), resolved];
   if (category !== "Uncategorized") checks.push(true);
   const confidence =
     Math.round((checks.filter(Boolean).length / checks.length) * 100) / 100;

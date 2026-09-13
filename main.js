@@ -686,6 +686,281 @@ function readStringList(value) {
   return items.map(readString).filter((item) => item.length > 0);
 }
 
+// src/domain/parser/patterns.ts
+function makeRegex(pattern) {
+  const translated = pattern.replace(/^\(\?i\)/, "").replace(/\(\?P<([A-Za-z_][A-Za-z0-9_]*)>/g, "(?<$1>");
+  return new RegExp(translated, "iu");
+}
+function extractByPatterns(text, patterns) {
+  for (const pattern of patterns ?? []) {
+    let regex;
+    try {
+      regex = makeRegex(pattern);
+    } catch (error) {
+      throw new Error(`Invalid SMS pattern ${pattern}: ${error.message}`);
+    }
+    const match = text.match(regex);
+    if (match) return match;
+  }
+  return null;
+}
+function hasKeyword(text, keywords) {
+  const folded = text.toLocaleLowerCase();
+  return (keywords ?? []).some((word) => folded.includes(String(word).toLocaleLowerCase()));
+}
+
+// src/domain/names.ts
+var ILLEGAL_IN_NAME = /[\\/:*?"<>|#^[\]]/;
+function sameName(left, right) {
+  return String(left ?? "").trim().toLocaleLowerCase() === String(right ?? "").trim().toLocaleLowerCase();
+}
+function noteNameProblem(name, existing, current = "", noun = "category") {
+  const article = /^[aeiou]/i.test(noun) ? "an" : "a";
+  const wanted = String(name ?? "").trim();
+  if (!wanted) return `${article === "an" ? "An" : "A"} ${noun} needs a name.`;
+  if (wanted.startsWith(".")) return "A name cannot start with a dot.";
+  const illegal = ILLEGAL_IN_NAME.exec(wanted);
+  if (illegal) return `A name cannot contain ${illegal[0]}`;
+  const clash = (existing ?? []).some(
+    (other) => sameName(other, wanted) && !sameName(other, current)
+  );
+  if (clash) return `There is already ${article} ${noun} called ${wanted}.`;
+  return null;
+}
+
+// src/domain/categorize.ts
+function categorize(text, rules) {
+  const folded = String(text ?? "").toLocaleLowerCase();
+  for (const rule of rules.rules ?? []) {
+    const keywords = rule.keywords ?? [];
+    if (keywords.some((word) => folded.includes(String(word).toLocaleLowerCase()))) {
+      return rule.category || "Uncategorized";
+    }
+  }
+  return "Uncategorized";
+}
+function withKeyword(rules, category, keyword) {
+  const name = String(category ?? "").trim();
+  const word = String(keyword ?? "").trim();
+  if (!name || !word) return { rules: [...rules.rules ?? []] };
+  const folded = word.toLocaleLowerCase();
+  const next = (rules.rules ?? []).map((rule) => ({
+    category: rule.category,
+    keywords: (rule.keywords ?? []).filter(
+      (existing) => String(existing).trim().toLocaleLowerCase() !== folded
+    )
+  }));
+  const target = next.find((rule) => sameName(rule.category, name));
+  if (target) target.keywords.push(word);
+  else next.push({ category: name, keywords: [word] });
+  return { rules: next };
+}
+function withKeywords(rules, category, keywords) {
+  const name = String(category ?? "").trim();
+  if (!name) return { rules: [...rules.rules ?? []] };
+  const kept = [];
+  const seen = /* @__PURE__ */ new Set();
+  for (const raw of keywords ?? []) {
+    const word = String(raw ?? "").trim();
+    const folded = word.toLocaleLowerCase();
+    if (!word || seen.has(folded)) continue;
+    seen.add(folded);
+    kept.push(word);
+  }
+  const next = (rules.rules ?? []).map((rule) => ({
+    category: rule.category,
+    keywords: sameName(rule.category, name) ? kept : (rule.keywords ?? []).filter(
+      (existing) => !seen.has(String(existing).trim().toLocaleLowerCase())
+    )
+  }));
+  if (!next.some((rule) => sameName(rule.category, name))) {
+    next.push({ category: name, keywords: kept });
+  }
+  return { rules: next };
+}
+function renamedCategory(rules, from, into) {
+  const before = String(from ?? "").trim();
+  const after = String(into ?? "").trim();
+  if (!before || !after || sameName(before, after)) return { rules: [...rules.rules ?? []] };
+  const next = [];
+  for (const rule of rules.rules ?? []) {
+    const isMoving = sameName(rule.category, before);
+    const target = next.find((entry) => sameName(entry.category, after));
+    if (isMoving || sameName(rule.category, after)) {
+      if (target) target.keywords.push(...rule.keywords ?? []);
+      else next.push({ category: after, keywords: [...rule.keywords ?? []] });
+    } else {
+      next.push({ category: rule.category, keywords: [...rule.keywords ?? []] });
+    }
+  }
+  return { rules: next };
+}
+function withoutCategory(rules, category) {
+  const name = String(category ?? "").trim();
+  if (!name) return { rules: [...rules.rules ?? []] };
+  return { rules: (rules.rules ?? []).filter((rule) => !sameName(rule.category, name)) };
+}
+function categoryNameProblem(name, existing, current = "") {
+  return noteNameProblem(name, existing, current, "category");
+}
+
+// src/domain/parser/sms.ts
+function normalizeCurrency(value, fallback) {
+  if (!value) return fallback || "";
+  const clean = String(value).toUpperCase().replaceAll(" ", "").replaceAll(".", "");
+  return clean === "\u062C\u0645" || clean === "\u062C\u0640\u0645" ? "EGP" : clean;
+}
+function stableId(text) {
+  let first = 2166136261;
+  let second = 2654435769;
+  for (let index = 0; index < text.length; index += 1) {
+    const code = text.charCodeAt(index);
+    first = Math.imul(first ^ code, 16777619) >>> 0;
+    second = Math.imul(second ^ code, 2246822507) >>> 0;
+  }
+  return first.toString(16).padStart(8, "0") + second.toString(16).padStart(8, "0");
+}
+function extractParty(sms, patterns) {
+  const match = extractByPatterns(sms, patterns);
+  if (!match) return "";
+  return cleanCounterpartyName(match.groups?.name ?? match[1] ?? "");
+}
+var uniqueStrings = (values) => {
+  const found = [];
+  for (const value of values) {
+    const clean = String(value ?? "").trim();
+    if (clean && !found.includes(clean)) found.push(clean);
+  }
+  return found;
+};
+function mergeAccountSources(notes, config) {
+  const accounts = [];
+  const positionOf = /* @__PURE__ */ new Map();
+  const add = (name, currency, endings, aliases) => {
+    const clean = String(name ?? "").trim();
+    if (!clean) return;
+    const key2 = clean.toLocaleLowerCase();
+    const at = positionOf.get(key2);
+    if (at === void 0) {
+      positionOf.set(key2, accounts.length);
+      accounts.push({
+        name: clean,
+        currency: currency || void 0,
+        card_endings: uniqueStrings(endings),
+        aliases: uniqueStrings(aliases)
+      });
+      return;
+    }
+    const entry = accounts[at];
+    if (!entry.currency && currency) entry.currency = currency;
+    entry.card_endings = uniqueStrings([...entry.card_endings ?? [], ...endings]);
+    entry.aliases = uniqueStrings([...entry.aliases ?? [], ...aliases]);
+  };
+  for (const note of notes) add(note.name, note.currency, note.cardEndings, note.aliases);
+  for (const entry of config.accounts ?? []) {
+    add(
+      String(entry.name ?? ""),
+      String(entry.currency ?? ""),
+      (entry.card_endings ?? []).map(String),
+      (entry.aliases ?? []).map(String)
+    );
+  }
+  return { accounts };
+}
+function placeholderAccount(ending) {
+  return `Card \u2022\u2022\u2022\u2022${ending}`;
+}
+function isPlaceholderAccount(value) {
+  return /^Card ••••[0-9]+$/u.test(String(value ?? "").trim());
+}
+function accountCandidates(sms, ending, accounts) {
+  const folded = sms.toLocaleLowerCase();
+  const found = [];
+  for (const account of accounts.accounts ?? []) {
+    const name = String(account.name ?? "").trim();
+    const endings = (account.card_endings ?? []).map(String);
+    const aliases = [name, ...account.aliases ?? []];
+    const matchesAlias = aliases.some((alias) => {
+      const clean = String(alias).trim().toLocaleLowerCase();
+      return clean.length >= 3 && folded.includes(clean);
+    });
+    if (name && (ending && endings.includes(ending) || matchesAlias) && !found.includes(name)) {
+      found.push(name);
+    }
+  }
+  if (!found.length && ending) found.push(placeholderAccount(ending));
+  return found;
+}
+function parseSms(sms, timestamp, config, patterns, accounts, categories) {
+  const amountMatch = extractByPatterns(sms, patterns.amount_patterns);
+  const amountText = amountMatch?.groups?.amount?.replaceAll(",", "");
+  const amount = amountText && Number.isFinite(Number(amountText)) ? Number(amountText) : null;
+  const currencyText = amountMatch?.groups?.currency1 || amountMatch?.groups?.currency2 || "";
+  const currency = normalizeCurrency(
+    currencyText,
+    amount !== null ? config.default_currency ?? "EGP" : ""
+  );
+  const endingMatch = extractByPatterns(sms, patterns.card_ending_patterns);
+  const ending = endingMatch?.groups?.ending ?? "";
+  const candidates = accountCandidates(sms, ending, accounts);
+  const isTransfer = hasKeyword(sms, patterns.transfer_keywords);
+  const isFee = hasKeyword(sms, patterns.fee_keywords);
+  const isCredit = hasKeyword(sms, patterns.credit_keywords);
+  const isDebit = hasKeyword(sms, patterns.debit_keywords);
+  let transactionType = "";
+  if (isTransfer) transactionType = "transfer";
+  else if (isFee && !isCredit) transactionType = "fee";
+  else if (isCredit && !isDebit) transactionType = "credit";
+  else if (isDebit && !isCredit) transactionType = "debit";
+  const role = roleForType(transactionType);
+  const merchantName = extractParty(sms, patterns.merchant_patterns);
+  const counterparty = role === "sender" ? extractParty(sms, patterns.sender_patterns) || merchantName : role === "recipient" ? extractParty(sms, patterns.recipient_patterns) || merchantName : merchantName || extractParty(sms, patterns.recipient_patterns);
+  let fromAccount = "";
+  let toAccount = "";
+  if (transactionType === "debit" || transactionType === "fee") fromAccount = candidates[0] ?? "";
+  else if (transactionType === "credit") toAccount = candidates[0] ?? "";
+  else if (transactionType === "transfer") {
+    fromAccount = candidates[0] ?? "";
+    toAccount = candidates[1] ?? "";
+  }
+  let category = categorize(`${sms}
+${counterparty}`, categories);
+  if (transactionType === "fee") category = "Fees";
+  else if (transactionType === "transfer" && category === "Uncategorized") category = "Transfer";
+  const resolved = candidates.some((candidate) => !isPlaceholderAccount(candidate));
+  const checks = [amount !== null, Boolean(currency), Boolean(transactionType), resolved];
+  if (category !== "Uncategorized") checks.push(true);
+  const confidence = Math.round(checks.filter(Boolean).length / checks.length * 100) / 100;
+  const complete = amount !== null && Boolean(currency) && Boolean(transactionType) && Boolean(fromAccount || toAccount);
+  const fingerprint = `${sms.trim().toLocaleLowerCase().replace(/\s+/g, " ")}|${timestamp}`;
+  return {
+    amount,
+    currency,
+    from_account: fromAccount,
+    to_account: toAccount,
+    category,
+    ...counterpartyFields(counterparty, role),
+    transaction_type: transactionType,
+    status: complete ? "parsed" : "pending",
+    parser_confidence: confidence,
+    transaction_id: stableId(fingerprint)
+  };
+}
+function extractTimestamp(sms, patterns) {
+  const match = extractByPatterns(sms, patterns.date_patterns);
+  const groups = match?.groups;
+  if (!groups) return null;
+  const year = groups.year ?? "";
+  const month = groups.month ?? "";
+  const day = groups.day ?? "";
+  if (!year || !month || !day) return null;
+  const pad = (value, width = 2) => String(value).padStart(width, "0");
+  const date = `${pad(year, 4)}-${pad(month)}-${pad(day)}`;
+  const time = `${pad(groups.hour ?? "00")}:${pad(groups.minute ?? "00")}:${pad(groups.second ?? "00")}`;
+  const candidate = `${date}T${time}+03:00`;
+  return Number.isFinite(Date.parse(candidate)) ? candidate : null;
+}
+
 // src/data/records.ts
 var TYPES = ["debit", "credit", "transfer", "fee"];
 var STATUSES = ["pending", "parsed"];
@@ -803,8 +1078,9 @@ function parserChanges(record, parsed) {
     const recordKey = toRecordKey(key2);
     if (!recordKey) continue;
     const current = record[recordKey];
-    const isDefault = key2 === "category" && current === "Uncategorized";
+    const isDefault = key2 === "category" && current === "Uncategorized" || (key2 === "from_account" || key2 === "to_account") && isPlaceholderAccount(current);
     if (!PARSER_OWNED.has(key2) && !isDefault && !isEmpty(current)) continue;
+    if (isDefault && isEmpty(value)) continue;
     if (current === value || isEmpty(current) && isEmpty(value)) continue;
     changes[key2] = value;
   }
@@ -1116,274 +1392,6 @@ async function loadRules(app) {
 }
 async function saveRules(app, rules) {
   await saveVaultJson(app, RULES_PATH, { rules });
-}
-
-// src/domain/parser/patterns.ts
-function makeRegex(pattern) {
-  const translated = pattern.replace(/^\(\?i\)/, "").replace(/\(\?P<([A-Za-z_][A-Za-z0-9_]*)>/g, "(?<$1>");
-  return new RegExp(translated, "iu");
-}
-function extractByPatterns(text, patterns) {
-  for (const pattern of patterns ?? []) {
-    let regex;
-    try {
-      regex = makeRegex(pattern);
-    } catch (error) {
-      throw new Error(`Invalid SMS pattern ${pattern}: ${error.message}`);
-    }
-    const match = text.match(regex);
-    if (match) return match;
-  }
-  return null;
-}
-function hasKeyword(text, keywords) {
-  const folded = text.toLocaleLowerCase();
-  return (keywords ?? []).some((word) => folded.includes(String(word).toLocaleLowerCase()));
-}
-
-// src/domain/names.ts
-var ILLEGAL_IN_NAME = /[\\/:*?"<>|#^[\]]/;
-function sameName(left, right) {
-  return String(left ?? "").trim().toLocaleLowerCase() === String(right ?? "").trim().toLocaleLowerCase();
-}
-function noteNameProblem(name, existing, current = "", noun = "category") {
-  const article = /^[aeiou]/i.test(noun) ? "an" : "a";
-  const wanted = String(name ?? "").trim();
-  if (!wanted) return `${article === "an" ? "An" : "A"} ${noun} needs a name.`;
-  if (wanted.startsWith(".")) return "A name cannot start with a dot.";
-  const illegal = ILLEGAL_IN_NAME.exec(wanted);
-  if (illegal) return `A name cannot contain ${illegal[0]}`;
-  const clash = (existing ?? []).some(
-    (other) => sameName(other, wanted) && !sameName(other, current)
-  );
-  if (clash) return `There is already ${article} ${noun} called ${wanted}.`;
-  return null;
-}
-
-// src/domain/categorize.ts
-function categorize(text, rules) {
-  const folded = String(text ?? "").toLocaleLowerCase();
-  for (const rule of rules.rules ?? []) {
-    const keywords = rule.keywords ?? [];
-    if (keywords.some((word) => folded.includes(String(word).toLocaleLowerCase()))) {
-      return rule.category || "Uncategorized";
-    }
-  }
-  return "Uncategorized";
-}
-function withKeyword(rules, category, keyword) {
-  const name = String(category ?? "").trim();
-  const word = String(keyword ?? "").trim();
-  if (!name || !word) return { rules: [...rules.rules ?? []] };
-  const folded = word.toLocaleLowerCase();
-  const next = (rules.rules ?? []).map((rule) => ({
-    category: rule.category,
-    keywords: (rule.keywords ?? []).filter(
-      (existing) => String(existing).trim().toLocaleLowerCase() !== folded
-    )
-  }));
-  const target = next.find((rule) => sameName(rule.category, name));
-  if (target) target.keywords.push(word);
-  else next.push({ category: name, keywords: [word] });
-  return { rules: next };
-}
-function withKeywords(rules, category, keywords) {
-  const name = String(category ?? "").trim();
-  if (!name) return { rules: [...rules.rules ?? []] };
-  const kept = [];
-  const seen = /* @__PURE__ */ new Set();
-  for (const raw of keywords ?? []) {
-    const word = String(raw ?? "").trim();
-    const folded = word.toLocaleLowerCase();
-    if (!word || seen.has(folded)) continue;
-    seen.add(folded);
-    kept.push(word);
-  }
-  const next = (rules.rules ?? []).map((rule) => ({
-    category: rule.category,
-    keywords: sameName(rule.category, name) ? kept : (rule.keywords ?? []).filter(
-      (existing) => !seen.has(String(existing).trim().toLocaleLowerCase())
-    )
-  }));
-  if (!next.some((rule) => sameName(rule.category, name))) {
-    next.push({ category: name, keywords: kept });
-  }
-  return { rules: next };
-}
-function renamedCategory(rules, from, into) {
-  const before = String(from ?? "").trim();
-  const after = String(into ?? "").trim();
-  if (!before || !after || sameName(before, after)) return { rules: [...rules.rules ?? []] };
-  const next = [];
-  for (const rule of rules.rules ?? []) {
-    const isMoving = sameName(rule.category, before);
-    const target = next.find((entry) => sameName(entry.category, after));
-    if (isMoving || sameName(rule.category, after)) {
-      if (target) target.keywords.push(...rule.keywords ?? []);
-      else next.push({ category: after, keywords: [...rule.keywords ?? []] });
-    } else {
-      next.push({ category: rule.category, keywords: [...rule.keywords ?? []] });
-    }
-  }
-  return { rules: next };
-}
-function withoutCategory(rules, category) {
-  const name = String(category ?? "").trim();
-  if (!name) return { rules: [...rules.rules ?? []] };
-  return { rules: (rules.rules ?? []).filter((rule) => !sameName(rule.category, name)) };
-}
-function categoryNameProblem(name, existing, current = "") {
-  return noteNameProblem(name, existing, current, "category");
-}
-
-// src/domain/parser/sms.ts
-function normalizeCurrency(value, fallback) {
-  if (!value) return fallback || "";
-  const clean = String(value).toUpperCase().replaceAll(" ", "").replaceAll(".", "");
-  return clean === "\u062C\u0645" || clean === "\u062C\u0640\u0645" ? "EGP" : clean;
-}
-function stableId(text) {
-  let first = 2166136261;
-  let second = 2654435769;
-  for (let index = 0; index < text.length; index += 1) {
-    const code = text.charCodeAt(index);
-    first = Math.imul(first ^ code, 16777619) >>> 0;
-    second = Math.imul(second ^ code, 2246822507) >>> 0;
-  }
-  return first.toString(16).padStart(8, "0") + second.toString(16).padStart(8, "0");
-}
-function extractParty(sms, patterns) {
-  const match = extractByPatterns(sms, patterns);
-  if (!match) return "";
-  return cleanCounterpartyName(match.groups?.name ?? match[1] ?? "");
-}
-var uniqueStrings = (values) => {
-  const found = [];
-  for (const value of values) {
-    const clean = String(value ?? "").trim();
-    if (clean && !found.includes(clean)) found.push(clean);
-  }
-  return found;
-};
-function mergeAccountSources(notes, config) {
-  const accounts = [];
-  const positionOf = /* @__PURE__ */ new Map();
-  const add = (name, currency, endings, aliases) => {
-    const clean = String(name ?? "").trim();
-    if (!clean) return;
-    const key2 = clean.toLocaleLowerCase();
-    const at = positionOf.get(key2);
-    if (at === void 0) {
-      positionOf.set(key2, accounts.length);
-      accounts.push({
-        name: clean,
-        currency: currency || void 0,
-        card_endings: uniqueStrings(endings),
-        aliases: uniqueStrings(aliases)
-      });
-      return;
-    }
-    const entry = accounts[at];
-    if (!entry.currency && currency) entry.currency = currency;
-    entry.card_endings = uniqueStrings([...entry.card_endings ?? [], ...endings]);
-    entry.aliases = uniqueStrings([...entry.aliases ?? [], ...aliases]);
-  };
-  for (const note of notes) add(note.name, note.currency, note.cardEndings, note.aliases);
-  for (const entry of config.accounts ?? []) {
-    add(
-      String(entry.name ?? ""),
-      String(entry.currency ?? ""),
-      (entry.card_endings ?? []).map(String),
-      (entry.aliases ?? []).map(String)
-    );
-  }
-  return { accounts };
-}
-function accountCandidates(sms, ending, accounts) {
-  const folded = sms.toLocaleLowerCase();
-  const found = [];
-  for (const account of accounts.accounts ?? []) {
-    const name = String(account.name ?? "").trim();
-    const endings = (account.card_endings ?? []).map(String);
-    const aliases = [name, ...account.aliases ?? []];
-    const matchesAlias = aliases.some((alias) => {
-      const clean = String(alias).trim().toLocaleLowerCase();
-      return clean.length >= 3 && folded.includes(clean);
-    });
-    if (name && (ending && endings.includes(ending) || matchesAlias) && !found.includes(name)) {
-      found.push(name);
-    }
-  }
-  if (!found.length && ending) found.push(`Card \u2022\u2022\u2022\u2022${ending}`);
-  return found;
-}
-function parseSms(sms, timestamp, config, patterns, accounts, categories) {
-  const amountMatch = extractByPatterns(sms, patterns.amount_patterns);
-  const amountText = amountMatch?.groups?.amount?.replaceAll(",", "");
-  const amount = amountText && Number.isFinite(Number(amountText)) ? Number(amountText) : null;
-  const currencyText = amountMatch?.groups?.currency1 || amountMatch?.groups?.currency2 || "";
-  const currency = normalizeCurrency(
-    currencyText,
-    amount !== null ? config.default_currency ?? "EGP" : ""
-  );
-  const endingMatch = extractByPatterns(sms, patterns.card_ending_patterns);
-  const ending = endingMatch?.groups?.ending ?? "";
-  const candidates = accountCandidates(sms, ending, accounts);
-  const isTransfer = hasKeyword(sms, patterns.transfer_keywords);
-  const isFee = hasKeyword(sms, patterns.fee_keywords);
-  const isCredit = hasKeyword(sms, patterns.credit_keywords);
-  const isDebit = hasKeyword(sms, patterns.debit_keywords);
-  let transactionType = "";
-  if (isTransfer) transactionType = "transfer";
-  else if (isFee && !isCredit) transactionType = "fee";
-  else if (isCredit && !isDebit) transactionType = "credit";
-  else if (isDebit && !isCredit) transactionType = "debit";
-  const role = roleForType(transactionType);
-  const merchantName = extractParty(sms, patterns.merchant_patterns);
-  const counterparty = role === "sender" ? extractParty(sms, patterns.sender_patterns) || merchantName : role === "recipient" ? extractParty(sms, patterns.recipient_patterns) || merchantName : merchantName || extractParty(sms, patterns.recipient_patterns);
-  let fromAccount = "";
-  let toAccount = "";
-  if (transactionType === "debit" || transactionType === "fee") fromAccount = candidates[0] ?? "";
-  else if (transactionType === "credit") toAccount = candidates[0] ?? "";
-  else if (transactionType === "transfer") {
-    fromAccount = candidates[0] ?? "";
-    toAccount = candidates[1] ?? "";
-  }
-  let category = categorize(`${sms}
-${counterparty}`, categories);
-  if (transactionType === "fee") category = "Fees";
-  else if (transactionType === "transfer" && category === "Uncategorized") category = "Transfer";
-  const checks = [amount !== null, Boolean(currency), Boolean(transactionType), candidates.length > 0];
-  if (category !== "Uncategorized") checks.push(true);
-  const confidence = Math.round(checks.filter(Boolean).length / checks.length * 100) / 100;
-  const complete = amount !== null && Boolean(currency) && Boolean(transactionType) && Boolean(fromAccount || toAccount);
-  const fingerprint = `${sms.trim().toLocaleLowerCase().replace(/\s+/g, " ")}|${timestamp}`;
-  return {
-    amount,
-    currency,
-    from_account: fromAccount,
-    to_account: toAccount,
-    category,
-    ...counterpartyFields(counterparty, role),
-    transaction_type: transactionType,
-    status: complete ? "parsed" : "pending",
-    parser_confidence: confidence,
-    transaction_id: stableId(fingerprint)
-  };
-}
-function extractTimestamp(sms, patterns) {
-  const match = extractByPatterns(sms, patterns.date_patterns);
-  const groups = match?.groups;
-  if (!groups) return null;
-  const year = groups.year ?? "";
-  const month = groups.month ?? "";
-  const day = groups.day ?? "";
-  if (!year || !month || !day) return null;
-  const pad = (value, width = 2) => String(value).padStart(width, "0");
-  const date = `${pad(year, 4)}-${pad(month)}-${pad(day)}`;
-  const time = `${pad(groups.hour ?? "00")}:${pad(groups.minute ?? "00")}:${pad(groups.second ?? "00")}`;
-  const candidate = `${date}T${time}+03:00`;
-  return Number.isFinite(Date.parse(candidate)) ? candidate : null;
 }
 
 // src/data/create.ts
@@ -4985,7 +4993,8 @@ var FinanceAutomationPlugin = class extends import_obsidian25.Plugin {
     let updated = 0;
     for (const record of this.index.transactions()) {
       let changes = {};
-      const needsParsing = record.status !== "parsed" && Boolean(record.smsMessage);
+      const provisional = isPlaceholderAccount(record.fromAccount) || isPlaceholderAccount(record.toAccount);
+      const needsParsing = (record.status !== "parsed" || provisional) && Boolean(record.smsMessage);
       if (needsParsing) {
         const parsed = parseSms(record.smsMessage, record.timestamp, config, patterns, accounts, categories);
         changes = parserChanges(record, parsed);
