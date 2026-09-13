@@ -60,6 +60,12 @@ export function toDateParts(
   return { date, month: date.slice(0, 7), year: date.slice(0, 4), time, epoch: instant.getTime() };
 }
 
+/** Cairo wall-clock time in the shape the notes write it: "YYYY-MM-DDTHH:mm:00". */
+export function cairoNow(now: Date = new Date()): string {
+  const { date, time } = formatInCairo(now);
+  return `${date}T${time}:00`;
+}
+
 export function cairoToday(now: Date = new Date()): string {
   return formatInCairo(now).date;
 }

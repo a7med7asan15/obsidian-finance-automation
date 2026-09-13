@@ -1,6 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { formatAmount, formatMoney, formatDayHeader, formatTime, directionOf } from "../src/ui/format.ts";
+import {
+  formatAmount, formatMoney, formatSignedAmount, formatDayHeader, formatTime, directionOf,
+} from "../src/ui/format.ts";
 import { categoryColor, CATEGORY_PALETTE } from "../src/ui/colors.ts";
 import { buildCategory } from "../src/data/records.ts";
 import { makeTransaction } from "./helpers/factory.ts";
@@ -58,4 +60,11 @@ test("categoryColor falls back to a stable palette entry", () => {
   assert.ok(CATEGORY_PALETTE.includes(first));
   assert.equal(first, categoryColor("Dining", empty), "the same name must always get the same colour");
   assert.notEqual(first, categoryColor("Transport", empty));
+});
+
+test("formatSignedAmount keeps the minus sign a balance depends on", () => {
+  assert.equal(formatSignedAmount(-350), "−350.00");
+  assert.equal(formatSignedAmount(350), "350.00");
+  assert.equal(formatSignedAmount(0), "0.00");
+  assert.equal(formatSignedAmount(-0), "0.00");
 });

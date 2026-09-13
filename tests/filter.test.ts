@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { applyFilter, countNeedingReview, distinctCategories, distinctAccounts } from "../src/domain/filter.ts";
+import { applyFilter, distinctCategories, distinctAccounts } from "../src/domain/filter.ts";
 import { DEFAULT_FILTER } from "../src/data/types.ts";
 import type { Filter } from "../src/data/types.ts";
 import { makeTransaction } from "./helpers/factory.ts";
@@ -72,10 +72,10 @@ test("type filter", () => {
 test("status filter", () => {
   const records = [
     makeTransaction({ status: "parsed" }),
-    makeTransaction({ status: "needs_review" }),
+    makeTransaction({ status: "pending" }),
     makeTransaction({ status: "pending" }),
   ];
-  assert.equal(applyFilter(records, filterOf({ statuses: ["needs_review", "pending"] }), TODAY).length, 2);
+  assert.equal(applyFilter(records, filterOf({ statuses: ["pending"] }), TODAY).length, 2);
 });
 
 test("a search typed with single spaces finds a padded message", () => {
@@ -142,17 +142,6 @@ test("results are ordered newest first", () => {
   ];
   const result = applyFilter(records, filterOf(), TODAY);
   assert.deepEqual(result.map((item) => item.date), ["2026-09-08", "2026-09-04", "2026-09-01"]);
-});
-
-test("countNeedingReview counts non-parsed and amount-less records, ignoring excluded", () => {
-  const records = [
-    makeTransaction({ status: "parsed" }),
-    makeTransaction({ status: "needs_review" }),
-    makeTransaction({ status: "pending" }),
-    makeTransaction({ status: "parsed", amount: "" }),
-    makeTransaction({ status: "needs_review", excluded: true }),
-  ];
-  assert.equal(countNeedingReview(records), 3);
 });
 
 test("distinctCategories and distinctAccounts are sorted and deduplicated", () => {

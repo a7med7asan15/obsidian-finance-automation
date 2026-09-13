@@ -7,7 +7,7 @@ import type {
 } from "./types.ts";
 
 const TYPES: TransactionType[] = ["debit", "credit", "transfer", "fee"];
-const STATUSES: TransactionStatus[] = ["pending", "parsed", "needs_review"];
+const STATUSES: TransactionStatus[] = ["pending", "parsed"];
 
 function basename(path: string): string {
   return path.split("/").pop()?.replace(/\.md$/, "") ?? path;
@@ -158,11 +158,11 @@ function isEmpty(value: unknown): boolean {
  * parser-owned keys are rewritten from the message every time.
  *
  * A value equal to the one the note already holds is not a change. That matters
- * because a note only stops being reparsed once it reaches `parsed`: a
- * `needs_review` note is parsed again on every pass, and writing its frontmatter
- * fires the same `modify` event the watcher uses to schedule the next pass. With
- * identical values still counted as changes, such a note rewrote itself for as
- * long as the vault stayed open.
+ * because a note only stops being reparsed once it reaches `parsed`: a `pending`
+ * note is parsed again on every pass, and writing its frontmatter fires the same
+ * `modify` event the watcher uses to schedule the next pass. With identical
+ * values still counted as changes, such a note rewrote itself for as long as the
+ * vault stayed open.
  */
 export function parserChanges(
   record: TransactionRecord,

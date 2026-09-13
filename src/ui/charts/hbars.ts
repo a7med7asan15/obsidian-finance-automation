@@ -1,4 +1,4 @@
-import { formatAmount } from "../format.ts";
+import { formatSignedAmount } from "../format.ts";
 
 export interface HBarDatum {
   label: string;
@@ -23,7 +23,9 @@ export function renderHBars(
     return;
   }
 
-  const max = Math.max(...data.map((item) => item.value)) || 1;
+  // Bars are measured by magnitude so a negative value — a balance in the red —
+  // draws a bar of its size rather than an empty track.
+  const max = Math.max(...data.map((item) => Math.abs(item.value))) || 1;
   const list = container.createDiv({ cls: "fin-hbars" });
 
   for (const item of data) {
@@ -33,12 +35,12 @@ export function renderHBars(
     head.createSpan({ cls: "fin-hbar-label", text: item.label });
     head.createSpan({
       cls: "fin-hbar-value fin-amount",
-      text: `${formatAmount(item.value)}${options.currency ? ` ${options.currency}` : ""}`,
+      text: `${formatSignedAmount(item.value)}${options.currency ? ` ${options.currency}` : ""}`,
     });
 
     const track = row.createDiv({ cls: "fin-hbar-track" });
     const fill = track.createDiv({ cls: "fin-hbar-fill" });
-    const ratio = item.ratio ?? item.value / max;
+    const ratio = item.ratio ?? Math.abs(item.value) / max;
     fill.style.width = `${Math.min(Math.max(ratio, 0), 1) * 100}%`;
     if (item.color) fill.style.background = item.color;
 

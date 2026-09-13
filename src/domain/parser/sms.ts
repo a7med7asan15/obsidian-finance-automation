@@ -36,7 +36,7 @@ export interface ParsedSms {
   recipient: string;
   sender: string;
   transaction_type: TransactionType;
-  status: "parsed" | "needs_review";
+  status: "parsed" | "pending";
   parser_confidence: number;
   transaction_id: string;
 }
@@ -215,7 +215,7 @@ export function parseSms(
     category,
     ...counterpartyFields(counterparty, role),
     transaction_type: transactionType,
-    status: complete ? "parsed" : "needs_review",
+    status: complete ? "parsed" : "pending",
     parser_confidence: confidence,
     transaction_id: stableId(fingerprint),
   };

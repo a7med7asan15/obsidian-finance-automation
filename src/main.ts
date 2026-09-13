@@ -21,6 +21,7 @@ import { updateTransaction } from "./data/write.ts";
 import { resolveExclusion } from "./domain/exclusion.ts";
 import { mergeAccountSources, parseSms } from "./domain/parser/sms.ts";
 import { counterpartyFields, readCounterparty } from "./domain/counterparty.ts";
+import { sameName } from "./domain/names.ts";
 import { withDefaultPatterns } from "./domain/parser/defaults.ts";
 import type { AccountConfig, CategoryRules, SmsPatterns } from "./domain/parser/sms.ts";
 import { DEFAULT_SETTINGS, FinanceAutomationSettingTab } from "./settings.ts";
@@ -28,7 +29,6 @@ import { FilterStore } from "./store/filter-store.ts";
 import { BUDGET_VIEW_TYPE, BudgetView } from "./ui/budget-view.ts";
 import type { BudgetTab } from "./ui/budget-view.ts";
 import { AddTransactionModal } from "./ui/components/add-transaction-modal.ts";
-import { CategoryEditorModal } from "./ui/components/category-editor.ts";
 import { RulesEditorModal } from "./ui/components/rules-editor.ts";
 import { TransactionSheet } from "./ui/components/transaction-sheet.ts";
 import type { TransactionRecord } from "./data/types.ts";
@@ -135,7 +135,7 @@ export default class FinanceAutomationPlugin extends Plugin {
     this.addCommand({
       id: "edit-categories",
       name: "Edit categories and budgets",
-      callback: () => this.openCategoryEditor(),
+      callback: () => this.showCategoriesTab(),
     });
 
     this.addCommand({
@@ -238,8 +238,8 @@ export default class FinanceAutomationPlugin extends Plugin {
     new TransactionSheet(this.app, this, record).open();
   }
 
-  openCategoryEditor(): void {
-    new CategoryEditorModal(this.app, this).open();
+  showCategoriesTab(): void {
+    void this.activateBudgetView().then(() => this.showBudgetTab("categories"));
   }
 
   openAddTransactionModal(): void {
@@ -444,6 +444,26 @@ export default class FinanceAutomationPlugin extends Plugin {
       if (record.category !== from) continue;
       this.ignoreWatchUntil.set(record.path, Date.now() + 2000);
       await updateTransaction(this.app, record.path, { category: to });
+      moved += 1;
+    }
+    return moved;
+  }
+
+  /**
+   * Points every transaction that named one account at another, and answers
+   * with how many moved. An account is matched by name everywhere money is
+   * counted, so a renamed note whose transactions still carry the old name
+   * would leave both of them holding half a balance.
+   */
+  async renameAccountReferences(from: string, to: string): Promise<number> {
+    let moved = 0;
+    for (const record of this.index.transactions()) {
+      const changes: Record<string, unknown> = {};
+      if (sameName(record.fromAccount, from)) changes.from_account = to;
+      if (sameName(record.toAccount, from)) changes.to_account = to;
+      if (!Object.keys(changes).length) continue;
+      this.ignoreWatchUntil.set(record.path, Date.now() + 2000);
+      await updateTransaction(this.app, record.path, changes);
       moved += 1;
     }
     return moved;

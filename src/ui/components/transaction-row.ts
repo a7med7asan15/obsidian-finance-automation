@@ -40,10 +40,6 @@ export class TransactionRow {
     text.createDiv({ cls: "fin-row-secondary", text: secondaryParts.join(" · ") });
 
     // --- badges, only when the state is not normal ---
-    if (record.status !== "parsed" || record.amount === null) {
-      const badge = text.createSpan({ cls: "fin-badge fin-badge-warn", text: "Needs review" });
-      badge.setAttribute("title", "The parser could not read every field");
-    }
     if (record.excluded) {
       text.createSpan({
         cls: "fin-badge fin-badge-excluded",

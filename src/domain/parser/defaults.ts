@@ -29,13 +29,29 @@ export const DEFAULT_PARTY_PATTERNS: Required<
 };
 
 /**
- * The vault's patterns with the built-in party patterns appended. Only the three
- * party lists are topped up: everything else is left exactly as the vault has
- * it, so an amount or a card pattern removed by hand stays removed.
+ * Built-in keywords that decide the direction of the money. Like the party
+ * patterns, these are the wordings every bank shares rather than the ones a
+ * particular vault has to spell out. `من حسابك` ("from your account") and
+ * `تم خصم` ("was deducted") both mean money left, so either one on its own is
+ * enough to read a message as spending.
+ *
+ * A transfer still wins over a debit — `parseSms` checks the transfer keywords
+ * first — so "تم تحويل 500 من حسابك إلى ..." stays a transfer rather than
+ * becoming spending.
+ */
+export const DEFAULT_KEYWORDS: Required<Pick<SmsPatterns, "debit_keywords">> = {
+  debit_keywords: ["من حسابك", "تم خصم"],
+};
+
+/**
+ * The vault's patterns with the built-in party patterns and keywords appended.
+ * Only those lists are topped up: everything else is left exactly as the vault
+ * has it, so an amount or a card pattern removed by hand stays removed.
  */
 export function withDefaultPatterns(patterns: SmsPatterns): SmsPatterns {
   const merged: SmsPatterns = { ...patterns };
-  for (const [key, defaults] of Object.entries(DEFAULT_PARTY_PATTERNS)) {
+  const defaultsByKey = { ...DEFAULT_PARTY_PATTERNS, ...DEFAULT_KEYWORDS };
+  for (const [key, defaults] of Object.entries(defaultsByKey)) {
     const own = (patterns as Record<string, string[] | undefined>)[key] ?? [];
     (merged as Record<string, string[]>)[key] = [
       ...own,

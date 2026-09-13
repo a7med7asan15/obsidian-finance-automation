@@ -143,9 +143,9 @@ When nothing matches, the transaction is filed under `Card ••••1234`, so
 never lost.
 
 The note becomes `status: parsed` once it has an amount, a currency, a type, and an
-account. Anything less becomes `status: needs_review` — never dropped. Add the missing
-pattern, alias, or card ending, then run **Process pending SMS transactions** from the
-command palette.
+account. Anything less stays `status: pending` — never dropped — and is parsed again on
+every pass, so filling in a missing pattern, alias, or card ending is enough to finish it.
+Run **Process pending SMS transactions** from the command palette to retry at once.
 
 ### Who was on the other side
 
@@ -237,7 +237,7 @@ obsidian://finance-transaction?amount=⟨Amount⟩&currency=⟨Currency⟩&accou
     tap away.
 
 The note is created `status: parsed` when amount, currency, type, and an account are all
-present, and `status: needs_review` otherwise.
+present, and `status: pending` otherwise.
 
 ### Parameters
 
@@ -268,7 +268,7 @@ safe as long as you write their spaces as `%20`.
 | Nothing happens when the link opens | Plugin not enabled, or Obsidian not restarted since installing it |
 | Inbox file never becomes a note | The file has an extension other than `.txt`, `.md`, `.text` or `.log`, or Save File wrote it outside `Budget/Inbox` |
 | Note appears but stays `pending` | Processing has not run yet; run **Process pending SMS transactions** |
-| `needs_review` with no account | The card digits are missing from `card_endings`, or the bank's wording is not in `card_ending_patterns` |
+| Stays `pending` with no account | The card digits are missing from `card_endings`, or the bank's wording is not in `card_ending_patterns` |
 | SMS note holds only the first word | The automation has no **URL Encode** action, so a space ended the link |
 | SMS text cut off at the same length every time | The link is running into a length ceiling — see above |
 | Manual note has a mangled account | A space in a dropdown value was not written as `%20` |

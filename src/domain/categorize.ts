@@ -1,10 +1,7 @@
+import { noteNameProblem, sameName } from "./names.ts";
+
 export interface CategoryRules {
   rules: Array<{ category: string; keywords: string[] }>;
-}
-
-/** Category names are compared the way they are matched: case does not matter. */
-function sameName(left: string, right: string): boolean {
-  return String(left ?? "").trim().toLocaleLowerCase() === String(right ?? "").trim().toLocaleLowerCase();
 }
 
 export function categorize(text: string, rules: CategoryRules): string {
@@ -131,15 +128,8 @@ export function withoutCategory(rules: CategoryRules, category: string): Categor
 }
 
 /**
- * The characters Obsidian refuses in a file name, plus the ones that would
- * break a link to the note. A category is named by its note, so a name that
- * cannot be a file name cannot be a category either.
- */
-const ILLEGAL_IN_NAME = /[\\/:*?"<>|#^[\]]/;
-
-/**
- * The reason `name` cannot be used, or null when it can. `existing` holds the
- * names already taken; a category being renamed passes its own name as
+ * The reason `name` cannot be a category, or null when it can. `existing` holds
+ * the names already taken; a category being renamed passes its own name as
  * `current` so keeping it is not read as a clash.
  */
 export function categoryNameProblem(
@@ -147,14 +137,5 @@ export function categoryNameProblem(
   existing: string[],
   current = "",
 ): string | null {
-  const wanted = String(name ?? "").trim();
-  if (!wanted) return "A category needs a name.";
-  if (wanted.startsWith(".")) return "A name cannot start with a dot.";
-  const illegal = ILLEGAL_IN_NAME.exec(wanted);
-  if (illegal) return `A name cannot contain ${illegal[0]}`;
-  const clash = (existing ?? []).some(
-    (other) => sameName(other, wanted) && !sameName(other, current),
-  );
-  if (clash) return `There is already a category called ${wanted}.`;
-  return null;
+  return noteNameProblem(name, existing, current, "category");
 }

@@ -5,7 +5,7 @@ import {
 } from "../src/domain/parser/sms.ts";
 import { buildAccount } from "../src/data/records.ts";
 import { categorize } from "../src/domain/categorize.ts";
-import { DEFAULT_PARTY_PATTERNS, withDefaultPatterns } from "../src/domain/parser/defaults.ts";
+import { DEFAULT_KEYWORDS, DEFAULT_PARTY_PATTERNS, withDefaultPatterns } from "../src/domain/parser/defaults.ts";
 import type { SmsPatterns, AccountConfig, CategoryRules } from "../src/domain/parser/sms.ts";
 
 const PATTERNS: SmsPatterns = {
@@ -78,9 +78,9 @@ test("an unrecognised card ending becomes a placeholder account", () => {
   assert.equal(result.from_account, "Card ••••9999");
 });
 
-test("an unparseable SMS is marked needs_review with low confidence", () => {
+test("an unparseable SMS stays pending with low confidence", () => {
   const result = parse("Your statement is ready");
-  assert.equal(result.status, "needs_review");
+  assert.equal(result.status, "pending");
   assert.equal(result.amount, null);
   assert.ok(result.parser_confidence < 0.5);
 });
@@ -285,4 +285,41 @@ test("withDefaultPatterns adds no duplicate when the vault already has a default
     merchant_patterns: [DEFAULT_PARTY_PATTERNS.merchant_patterns[0]!],
   });
   assert.deepEqual(merged.merchant_patterns, DEFAULT_PARTY_PATTERNS.merchant_patterns);
+});
+
+test("withDefaultPatterns tops up the debit keywords too", () => {
+  const merged = withDefaultPatterns({ debit_keywords: ["purchase"] });
+  assert.deepEqual(merged.debit_keywords, ["purchase", ...DEFAULT_KEYWORDS.debit_keywords]);
+});
+
+test("a vault with no keywords at all still reads the two Arabic wordings", () => {
+  const merged = withDefaultPatterns({});
+  assert.deepEqual(merged.debit_keywords, DEFAULT_KEYWORDS.debit_keywords);
+});
+
+// The vault reads an Arabic card line as well as an English one; the shared
+// fixture above only carries the English pattern.
+const ARABIC_PATTERNS: SmsPatterns = {
+  ...PATTERNS,
+  card_ending_patterns: [
+    ...PATTERNS.card_ending_patterns!,
+    "(?i)(?:بطاقة|حساب)\\s*(?:رقم)?\\s*[:#-]?\\s*(?P<ending>[0-9]{4})",
+  ],
+};
+
+test("money out of your account is spending, whichever wording the bank used", () => {
+  for (const sms of [
+    "تم خصم مبلغ 250 جم من بطاقة 0774",
+    "مبلغ 250 جم من حسابك بطاقة 0774",
+  ]) {
+    const result = withDefaults(sms, ARABIC_PATTERNS);
+    assert.equal(result.transaction_type, "debit", sms);
+    assert.equal(result.from_account, "CIB", sms);
+    assert.equal(result.status, "parsed", sms);
+  }
+});
+
+test("a transfer out of your account stays a transfer, not spending", () => {
+  const result = withDefaults("تم تحويل مبلغ 500 جم من حسابك بطاقة 0774", ARABIC_PATTERNS);
+  assert.equal(result.transaction_type, "transfer");
 });

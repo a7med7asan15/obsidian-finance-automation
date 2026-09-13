@@ -12,7 +12,6 @@ const TYPE_OPTIONS: Array<{ value: TransactionType; label: string }> = [
 
 const STATUS_OPTIONS: Array<{ value: TransactionStatus; label: string }> = [
   { value: "parsed", label: "Parsed" },
-  { value: "needs_review", label: "Needs review" },
   { value: "pending", label: "Pending" },
 ];
 

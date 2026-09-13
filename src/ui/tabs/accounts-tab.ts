@@ -2,9 +2,11 @@ import { setIcon } from "obsidian";
 import { deriveBalances, netWorthByCurrency, unknownAccountNames } from "../../domain/balances.ts";
 import { applyFilter } from "../../domain/filter.ts";
 import { cairoToday } from "../../domain/dates.ts";
-import { formatAmount } from "../format.ts";
+import { formatAmount, formatSignedAmount } from "../format.ts";
 import { renderEmptyState } from "../components/empty-state.ts";
+import { AccountEditorModal } from "../components/account-editor.ts";
 import type FinanceAutomationPlugin from "../../main.ts";
+import type { AccountRecord } from "../../data/types.ts";
 
 const TYPE_ICONS: Record<string, string> = {
   bank: "landmark", card: "credit-card", wallet: "wallet", cash: "banknote",
@@ -20,8 +22,10 @@ export class AccountsTab {
     if (!accounts.length) {
       renderEmptyState(
         container, "wallet", "No accounts yet",
-        "Copy Budget/Templates/Account.md into Budget/Accounts/ for each account.",
+        "An account is a note under Budget/Accounts/ holding its card endings and its " +
+        "starting balance. Add the first one below.",
       );
+      this.renderNewButton(container);
       return;
     }
 
@@ -40,7 +44,10 @@ export class AccountsTab {
       header.createDiv({ cls: "fin-networth-label", text: "Net worth" });
       for (const [currency, value] of [...netWorth].sort()) {
         const row = header.createDiv({ cls: "fin-networth-row" });
-        row.createSpan({ cls: "fin-networth-value fin-amount", text: formatAmount(value) });
+        row.createSpan({
+          cls: `fin-networth-value fin-amount ${value < 0 ? "fin-out" : ""}`,
+          text: formatSignedAmount(value),
+        });
         row.createSpan({ cls: "fin-networth-currency", text: currency });
       }
     }
@@ -58,15 +65,21 @@ export class AccountsTab {
       names.createDiv({ cls: "fin-account-name", text: item.account.name });
       names.createDiv({
         cls: "fin-account-type",
-        text: [item.account.institution, item.account.accountType].filter(Boolean).join(" · "),
+        text: [
+          item.account.institution,
+          item.account.accountType,
+          item.account.cardEndings.length ? `··${item.account.cardEndings[0]}` : "",
+        ].filter(Boolean).join(" · "),
       });
 
       const amount = head.createDiv({ cls: "fin-account-amount" });
       amount.createDiv({
         cls: `fin-amount fin-account-balance ${item.balance < 0 ? "fin-out" : ""}`,
-        text: formatAmount(item.balance),
+        text: formatSignedAmount(item.balance),
       });
       amount.createDiv({ cls: "fin-account-currency", text: item.account.currency });
+
+      this.renderEditButton(head, item.account);
 
       const period = periodBalances.get(item.account.path);
       if (period) {
@@ -82,7 +95,8 @@ export class AccountsTab {
       if (item.drift !== null && Math.abs(item.drift) > 0.005) {
         const drift = card.createDiv({ cls: "fin-account-drift" });
         drift.setText(
-          `Statement differs by ${formatAmount(item.drift)} ${item.account.currency}` +
+          `Statement is ${formatAmount(item.drift)} ${item.account.currency} ` +
+          `${item.drift > 0 ? "higher" : "lower"} than these transactions` +
           (item.account.referenceUpdatedAt ? ` (as of ${item.account.referenceUpdatedAt.slice(0, 10)})` : ""),
         );
       }
@@ -93,16 +107,51 @@ export class AccountsTab {
       });
     }
 
+    this.renderNewButton(container);
+
     // --- unrecognised names ---
     const unknown = unknownAccountNames(accounts, allRecords);
     if (unknown.length) {
       const box = container.createDiv({ cls: "fin-unknown" });
       box.createEl("strong", { text: "Transactions reference accounts that are not set up:" });
-      box.createEl("p", { text: unknown.join(", ") });
+      const names = box.createDiv({ cls: "fin-unknown-names" });
+      for (const name of unknown) {
+        // The name is already spelt the way the transactions spell it, so
+        // starting the note from it is what makes the two meet.
+        const button = names.createEl("button", { cls: "fin-chip", text: `Set up ${name}` });
+        button.addEventListener("click", () => {
+          new AccountEditorModal(this.plugin.app, this.plugin, null, name).open();
+        });
+      }
       box.createEl("p", {
         cls: "fin-sheet-note",
-        text: "Add them to Budget/Settings/accounts.json and create a note in Budget/Accounts/ so their balances are tracked.",
+        text: "Until an account exists under that name, its transactions move no balance.",
       });
     }
+  }
+
+  /**
+   * Editing sits on the card rather than behind it: tapping the card asks what
+   * an account spent, which is the common question, so changing what the
+   * account *is* needs its own target.
+   */
+  private renderEditButton(head: HTMLElement, account: AccountRecord): void {
+    const edit = head.createEl("button", {
+      cls: "clickable-icon fin-account-edit",
+      attr: { "aria-label": `Edit ${account.name}` },
+    });
+    setIcon(edit, "pencil");
+    edit.addEventListener("click", (event) => {
+      event.stopPropagation();
+      new AccountEditorModal(this.plugin.app, this.plugin, account).open();
+    });
+  }
+
+  private renderNewButton(container: HTMLElement): void {
+    const actions = container.createDiv({ cls: "fin-account-actions" });
+    const add = actions.createEl("button", { cls: "fin-more", text: "New account" });
+    add.addEventListener("click", () => {
+      new AccountEditorModal(this.plugin.app, this.plugin, null).open();
+    });
   }
 }

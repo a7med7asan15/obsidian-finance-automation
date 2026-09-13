@@ -5,16 +5,18 @@ import { FilterBar } from "./components/filter-bar.ts";
 import { TransactionsTab } from "./tabs/transactions-tab.ts";
 import { AccountsTab } from "./tabs/accounts-tab.ts";
 import { MerchantsTab } from "./tabs/merchants-tab.ts";
+import { CategoriesTab } from "./tabs/categories-tab.ts";
 import { StatsTab } from "./tabs/stats-tab.ts";
 import type FinanceAutomationPlugin from "../main.ts";
 
 export const BUDGET_VIEW_TYPE = "finance-budget-view";
 
-export type BudgetTab = "transactions" | "merchants" | "accounts" | "stats";
+export type BudgetTab = "transactions" | "merchants" | "categories" | "accounts" | "stats";
 
 const TABS: Array<{ id: BudgetTab; label: string }> = [
   { id: "transactions", label: "Transactions" },
   { id: "merchants", label: "Merchants" },
+  { id: "categories", label: "Categories" },
   { id: "accounts", label: "Accounts" },
   { id: "stats", label: "Stats" },
 ];
@@ -28,6 +30,7 @@ export class BudgetView extends ItemView {
   private filterBar: FilterBar | null = null;
   private transactionsTab!: TransactionsTab;
   private merchantsTab!: MerchantsTab;
+  private categoriesTab!: CategoriesTab;
   private accountsTab!: AccountsTab;
   private statsTab!: StatsTab;
   private unsubscribe: Array<() => void> = [];
@@ -56,6 +59,7 @@ export class BudgetView extends ItemView {
 
     this.transactionsTab = new TransactionsTab(this.plugin);
     this.merchantsTab = new MerchantsTab(this.plugin);
+    this.categoriesTab = new CategoriesTab(this.plugin);
     this.accountsTab = new AccountsTab(this.plugin);
     this.statsTab = new StatsTab(this.plugin);
 
@@ -119,17 +123,21 @@ export class BudgetView extends ItemView {
     this.bodyEl.empty();
     if (this.activeTab === "transactions") this.renderTransactions();
     else if (this.activeTab === "merchants") this.renderMerchants();
+    else if (this.activeTab === "categories") this.renderCategories();
     else if (this.activeTab === "accounts") this.renderAccounts();
     else this.renderStats();
   }
 
-  // Filled in by Task 6 (transactions) and Plan C (accounts, stats).
   private renderTransactions(): void {
     this.transactionsTab.render(this.bodyEl);
   }
 
   private renderMerchants(): void {
     this.merchantsTab.render(this.bodyEl);
+  }
+
+  private renderCategories(): void {
+    this.categoriesTab.render(this.bodyEl);
   }
 
   private renderAccounts(): void {

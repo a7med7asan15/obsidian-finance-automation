@@ -7,7 +7,7 @@ import { budgetProgress } from "../../domain/budgets.ts";
 import { deriveBalances, netWorthByCurrency } from "../../domain/balances.ts";
 import { cairoToday, periodLabel, resolvePeriod } from "../../domain/dates.ts";
 import { categoryColor } from "../colors.ts";
-import { formatAmount } from "../format.ts";
+import { formatAmount, formatSignedAmount } from "../format.ts";
 import { renderPanel } from "../components/panel.ts";
 import { renderDonut } from "../charts/donut.ts";
 import { renderBars } from "../charts/bars.ts";
@@ -195,7 +195,7 @@ export class StatsTab {
 
   private renderCategoryEditorButton(body: HTMLElement): void {
     const button = body.createEl("button", { cls: "fin-more", text: "Edit categories and budgets" });
-    button.addEventListener("click", () => this.plugin.openCategoryEditor());
+    button.addEventListener("click", () => this.plugin.showCategoriesTab());
   }
 
   /** 5. Top merchants. */
@@ -236,14 +236,24 @@ export class StatsTab {
       balances
         .filter((item) => item.balance !== 0)
         .sort((a, b) => b.balance - a.balance)
-        .map((item) => ({ label: item.account.name, value: item.balance, caption: item.account.currency })),
+        .map((item) => ({
+          label: item.account.name,
+          value: item.balance,
+          caption: item.account.currency,
+          // An account in the red is the one thing on this panel worth
+          // spotting without reading the number.
+          color: item.balance < 0 ? "var(--fin-money-out)" : undefined,
+        })),
       { currency: "" },
     );
 
     for (const [currency, value] of [...netWorthByCurrency(balances)].sort()) {
       const net = body.createDiv({ cls: "fin-panel-net" });
       net.createSpan({ text: `Net worth (${currency})` });
-      net.createSpan({ cls: "fin-amount", text: formatAmount(value) });
+      net.createSpan({
+        cls: `fin-amount ${value < 0 ? "fin-out" : ""}`,
+        text: formatSignedAmount(value),
+      });
     }
   }
 }

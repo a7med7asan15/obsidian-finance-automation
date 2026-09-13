@@ -6,7 +6,7 @@ export type TransactionType = "debit" | "credit" | "transfer" | "fee" | "";
  * for money received. An empty role means the note names no party at all.
  */
 export type CounterpartyRole = "merchant" | "recipient" | "sender" | "";
-export type TransactionStatus = "pending" | "parsed" | "needs_review";
+export type TransactionStatus = "pending" | "parsed";
 export type ExcludeSource = "manual" | "rule" | null;
 
 export interface TransactionRecord {

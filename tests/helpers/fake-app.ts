@@ -71,9 +71,48 @@ export class FakeAdapter {
   }
 }
 
+/** `key: value` lines plus the `key:\n  - item` lists an account note holds. */
+function parseFrontMatter(block: string): Record<string, unknown> {
+  const frontmatter: Record<string, unknown> = {};
+  let list: string[] | null = null;
+  for (const line of block.split("\n")) {
+    const item = /^\s+-\s*(.*)$/.exec(line);
+    if (list && item) {
+      list.push(item[1].replace(/^"(.*)"$/, "$1"));
+      continue;
+    }
+    list = null;
+    const colon = line.indexOf(":");
+    if (colon <= 0) continue;
+    const key = line.slice(0, colon).trim();
+    const value = line.slice(colon + 1).trim();
+    if (value === "") {
+      // Either an empty scalar or the head of a list; the next line decides.
+      list = [];
+      frontmatter[key] = list;
+      continue;
+    }
+    frontmatter[key] = value === "[]" ? [] : value;
+  }
+  // A key that gained no list items was an empty scalar after all.
+  for (const [key, value] of Object.entries(frontmatter)) {
+    if (Array.isArray(value) && value.length === 0) frontmatter[key] = "";
+  }
+  return frontmatter;
+}
+
+function writeFrontMatter(frontmatter: Record<string, unknown>): string {
+  return Object.entries(frontmatter)
+    .map(([key, value]) => {
+      if (!Array.isArray(value)) return `${key}: ${value ?? ""}`;
+      if (!value.length) return `${key}: []`;
+      return [`${key}:`, ...value.map((item) => `  - ${JSON.stringify(String(item))}`)].join("\n");
+    })
+    .join("\n");
+}
+
 /**
- * The slice of `app.fileManager` the category writes go through. Frontmatter is
- * treated as flat `key: value` lines, which is all a category note has.
+ * The slice of `app.fileManager` the category and account writes go through.
  */
 export class FakeFileManager {
   private readonly vault: FakeVault;
@@ -98,15 +137,10 @@ export class FakeFileManager {
   ): Promise<void> {
     const content = this.vault.files.get(file.path) ?? "";
     const match = /^---\n([\s\S]*?)\n---\n?/.exec(content);
-    const frontmatter: Record<string, unknown> = {};
-    for (const line of (match?.[1] ?? "").split("\n")) {
-      const colon = line.indexOf(":");
-      if (colon > 0) frontmatter[line.slice(0, colon).trim()] = line.slice(colon + 1).trim();
-    }
+    const frontmatter = parseFrontMatter(match?.[1] ?? "");
     edit(frontmatter);
     const body = match ? content.slice(match[0].length) : content;
-    const lines = Object.entries(frontmatter).map(([key, value]) => `${key}: ${value ?? ""}`);
-    this.vault.files.set(file.path, `---\n${lines.join("\n")}\n---\n${body}`);
+    this.vault.files.set(file.path, `---\n${writeFrontMatter(frontmatter)}\n---\n${body}`);
   }
 }
 

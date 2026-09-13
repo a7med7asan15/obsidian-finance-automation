@@ -252,7 +252,7 @@ export async function createStructuredTransaction(app: App, params: ProtocolPara
     category,
     counterparty,
     transaction_type: transactionType,
-    status: complete ? "parsed" : "needs_review",
+    status: complete ? "parsed" : "pending",
     source: "iphone-shortcut-fields",
     parser_confidence: checks.filter(Boolean).length / checks.length,
     transaction_id: stableId(fingerprint),

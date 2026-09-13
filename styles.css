@@ -189,22 +189,6 @@
 .fin-summary-label { font-size: 0.75em; color: var(--text-muted); }
 .fin-summary-value { font-size: 1.05em; font-weight: 700; overflow-wrap: anywhere; }
 
-/* ---------- banner ---------- */
-.fin-banner {
-  display: flex; align-items: center; gap: 8px;
-  margin: 0 var(--fin-gap) var(--fin-gap); padding: 10px 12px;
-  border-radius: var(--fin-radius);
-  background: color-mix(in srgb, var(--fin-warn) 12%, transparent);
-  color: var(--text-normal); font-size: 0.9em;
-}
-.fin-banner-icon { color: var(--fin-warn); display: grid; place-items: center; }
-.fin-banner-action {
-  margin-left: auto; min-height: 32px; padding: 0 10px;
-  border: none; border-radius: 8px;
-  background: var(--fin-warn); color: var(--background-primary);
-  font-weight: 600; cursor: pointer;
-}
-
 /* ---------- list ---------- */
 .fin-list { padding-bottom: 96px; }
 
@@ -240,7 +224,6 @@
   display: inline-block; margin-top: 2px; padding: 1px 6px;
   border-radius: 6px; font-size: 0.7em; font-weight: 600;
 }
-.fin-badge-warn { background: color-mix(in srgb, var(--fin-warn) 20%, transparent); color: var(--fin-warn); }
 .fin-badge-excluded { background: var(--fin-raised); color: var(--text-muted); }
 
 .fin-row-amount { flex: 0 0 auto; text-align: right; display: flex; flex-direction: column; gap: 2px; }
@@ -402,6 +385,13 @@
 .fin-account-balance { font-size: 1.1em; font-weight: 700; }
 .fin-account-currency { font-size: 0.7em; color: var(--text-muted); }
 
+.fin-account-edit {
+  flex: 0 0 auto; margin-left: 4px;
+  min-width: var(--fin-touch); min-height: var(--fin-touch);
+  color: var(--text-muted);
+}
+.fin-account-actions { padding: 0 var(--fin-gap) var(--fin-gap); }
+
 .fin-account-flow { display: flex; gap: 12px; margin-top: 10px; font-size: 0.8em; }
 .fin-account-count { color: var(--text-muted); margin-left: auto; }
 .fin-account-drift { margin-top: 6px; font-size: 0.75em; color: var(--fin-warn); }
@@ -413,6 +403,7 @@
   font-size: 0.85em;
 }
 .fin-unknown p { margin: 4px 0 0; }
+.fin-unknown-names { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 
 /* ---------- stats panels ---------- */
 .fin-panel-grid { display: grid; grid-template-columns: 1fr; gap: 12px; padding: 0 var(--fin-gap) 96px; }
@@ -434,7 +425,22 @@
   font-size: 0.9em; font-weight: 600;
 }
 
-/* ---------- category editor ---------- */
+/* ---------- categories tab ---------- */
+.fin-category-bar {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+  padding: 10px var(--fin-gap) 4px;
+}
+.fin-category-bar-count { font-size: 0.85em; font-weight: 600; }
+.fin-category-sorts { display: flex; gap: 6px; margin-left: auto; }
+.fin-category-list { padding: 4px var(--fin-gap) 96px; }
+.fin-category-amounts { flex: 0 0 auto; display: flex; align-items: baseline; gap: 6px; }
+.fin-category-currency { font-size: 0.75em; color: var(--text-muted); }
+.fin-category-meta { font-size: 0.75em; color: var(--text-muted); margin-bottom: 6px; }
+.fin-category-editor { margin-top: 8px; }
+.fin-category-row.is-over { border-left: 2px solid var(--fin-over); padding-left: 8px; }
+.fin-category-row.is-over .fin-category-meta { color: var(--fin-over); }
+.fin-tab-body > .fin-rule-error { margin: 0 var(--fin-gap) 8px; }
+
 .fin-category-row { display: flex; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--fin-border); }
 .fin-category-glyph {
   flex: 0 0 auto; display: grid; place-items: center;
@@ -443,10 +449,10 @@
   background: color-mix(in srgb, var(--fin-cat-color) 15%, transparent);
 }
 .fin-category-body { flex: 1 1 auto; min-width: 0; }
-.fin-category-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
-.fin-category-name { font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
+.fin-category-head { display: flex; align-items: baseline; gap: 8px; margin-bottom: 4px; }
+.fin-category-name { flex: 1 1 auto; font-weight: 600; min-width: 0; overflow-wrap: anywhere; cursor: pointer; }
 .fin-category-count { font-size: 0.8em; color: var(--text-muted); white-space: nowrap; }
-.fin-category-actions { margin-left: auto; display: flex; gap: 2px; flex: 0 0 auto; }
+.fin-category-actions { display: flex; align-items: center; gap: 4px; margin-top: 8px; }
 .fin-category-actions button { min-width: var(--fin-touch); min-height: var(--fin-touch); }
 .fin-category-body .setting-item-control { flex: 1 1 55%; }
 .fin-keyword-input { width: 100%; resize: vertical; font-size: 0.9em; }

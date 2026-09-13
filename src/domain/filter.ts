@@ -47,12 +47,6 @@ export function applyFilter(
   return matched.sort((a, b) => (b.epoch ?? -Infinity) - (a.epoch ?? -Infinity));
 }
 
-export function countNeedingReview(records: TransactionRecord[]): number {
-  return records.filter(
-    (record) => !record.excluded && (record.status !== "parsed" || record.amount === null),
-  ).length;
-}
-
 export function distinctCategories(records: TransactionRecord[]): string[] {
   const names = new Set(records.map((record) => record.category).filter(Boolean));
   return [...names].sort((a, b) => a.localeCompare(b));

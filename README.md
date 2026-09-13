@@ -74,7 +74,7 @@ Restart Obsidian, then enable **Finance Automation** under Community plugins.
 ## The Budget view
 
 Open it from the wallet icon in the ribbon, or with **Open Budget** from the command
-palette. It has four tabs sharing one set of filters.
+palette. It has five tabs sharing one set of filters.
 
 - **Transactions** — grouped by day, defaulting to the current month. Step months with
   the arrows, or tap the month name to switch to a year, all time, or a custom range.
@@ -87,12 +87,23 @@ palette. It has four tabs sharing one set of filters.
   narrow the list to the names still sitting in Uncategorized. The dropdown also offers
   **New category…**, which writes the category and files the name in one step. Reach the
   tab from the command palette with **List merchants, recipients and senders**.
-- **Categories** (command palette: **Edit categories and budgets**, or the button under
-  the Budgets panel on the Stats tab) adds, renames and deletes categories, and sets each
-  one's colour, icon, monthly budget and keywords. Renaming re-files every transaction
-  that carried the old name and moves its keywords along with it. Deleting asks where its
-  transactions should go and sends the note to the trash; nothing is deleted from a
-  transaction. There is no need to write a category note by hand any more.
+- **Categories** — the same list, read by category instead of by name: a row each, biggest
+  first, with what the period spent against it and how its budget is holding up. **Edit**
+  opens the colour, icon, monthly budget and keywords in place; the pencil renames and the
+  bin deletes. Renaming re-files every transaction that carried the old name and moves its
+  keywords along with it. Deleting asks where its transactions should go and sends the note
+  to the trash; nothing is deleted from a transaction. A category the transactions name but
+  no note describes is listed too, with a button to write its note. **New category** adds
+  one. Reach the tab from the command palette with **Edit categories and budgets**, or with
+  the button under the Budgets panel on the Stats tab.
+- **Accounts** — a card per account with its derived balance, what the period moved through
+  it, and how far a statement figure has drifted. The pencil on a card opens everything the
+  note holds: name, bank, type, currency, card endings, other names, starting balance and
+  date, statement balance, whether the account is still in use and whether it counts towards
+  net worth. Renaming an account moves its note *and* re-files every transaction that named
+  it, because a balance is matched by name. **New account** writes a note from scratch, and
+  an account name the transactions use but no note describes is offered as a **Set up**
+  button.
 - **Excluding a transaction** keeps it in the list but removes it from every total.
   Use it for a reversal, a duplicate SMS, or anything that did not really happen.
 - **Exclusion rules** (command palette: **Edit exclusion rules**) exclude matching
@@ -112,6 +123,12 @@ and `sender_patterns` in `Budget/Settings/sms_patterns.json`. A built-in set of 
 for the usual English and Arabic wordings (`at`, `to`, `from`, `عند`, `لدى`, `إلى`, `من`)
 runs after whatever that file holds, so a bank's ordinary phrasing is understood out of
 the box and a pattern written by hand still takes precedence.
+
+The direction of the money is read the same way. `debit_keywords`, `credit_keywords`,
+`transfer_keywords` and `fee_keywords` in that file decide it, and the two Arabic wordings
+for money leaving an account — `من حسابك` and `تم خصم` — are built in, so either one on
+its own reads as spending whether or not the vault file lists it. A transfer still wins:
+`تم تحويل 500 من حسابك` stays a transfer rather than becoming spending.
 
 A transaction that reached `status: parsed` is never parsed again, so notes filed before
 the parser knew a wording keep an empty party key. **Fill in missing merchants from
@@ -160,6 +177,31 @@ After a build, reload Obsidian to pick up the new bundle.
 ## Privacy
 
 All parsing happens locally. The plugin does not send SMS text, transactions, or settings anywhere.
+
+## Cutting a release
+
+`scripts/release.sh` does the whole update path BRAT watches: it bumps the version,
+commits, tags, and pushes, and the push is what starts
+[`.github/workflows/release.yml`](.github/workflows/release.yml), which builds the
+bundle and publishes the release with its assets.
+
+```bash
+scripts/release.sh patch "stops a needs_review note rewriting itself"
+scripts/release.sh minor "edits accounts and categories in place"
+scripts/release.sh 3.2.0 --dry-run   # run the checks and print the plan, change nothing
+```
+
+Take either a bump keyword or an exact `X.Y.Z`. The summary is optional and becomes the
+rest of the commit subject after `release: X.Y.Z`.
+
+Before anything is written the script requires main, a clean working tree, a branch not
+behind `origin/main`, a version newer than the current one, and a tag that does not exist
+yet locally or on origin; then `npm test` and `npm run build` have to pass. Only then does
+it write `manifest.json`, `package.json` and `versions.json`, commit those with the rebuilt
+`main.js` and `styles.css`, tag the commit, and push the branch and the tag.
+
+A release reaches the iPhone a few minutes later: once the Actions run is green, BRAT sees
+a tag newer than the installed `manifest.json` and offers the update on its next check.
 
 ## Release format
 

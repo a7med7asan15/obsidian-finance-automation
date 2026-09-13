@@ -134,12 +134,12 @@ test("a structured capture normalises its fields", async () => {
   assert.match(content, /source: iphone-shortcut-fields/);
 });
 
-test("a structured capture with an unknown type needs review", async () => {
+test("a structured capture with an unknown type stays pending", async () => {
   const app = fakeApp();
   const file = await createStructuredTransaction(app, {
     amount: "20", currency: "EGP", account: "Cash", type: "expense",
   });
-  assert.match(app.vault.files.get(file.path)!, /status: needs_review/);
+  assert.match(app.vault.files.get(file.path)!, /status: pending/);
 });
 
 test("a manual transaction writes its note under a Notes heading", async () => {

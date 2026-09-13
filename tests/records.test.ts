@@ -137,7 +137,7 @@ test("parserChanges fills empty fields and the parser-owned keys", () => {
       timestamp: "2026-09-11T20:15:09.203Z",
       sms_message: "تم خصم EGP 350.00",
       category: "Uncategorized",
-      status: "needs_review",
+      status: "pending",
       parser_confidence: 0,
       transaction_id: "aee0fb590d45575d",
     },
@@ -163,14 +163,14 @@ test("parserChanges fills empty fields and the parser-owned keys", () => {
 });
 
 test("parserChanges never rewrites a field with the value it already holds", () => {
-  // A needs_review note is reparsed on every pass, and a frontmatter write fires
+  // A pending note is reparsed on every pass, and a frontmatter write fires
   // the modify event that schedules the next one. Identical values counting as
   // changes is what let such a note rewrite itself without end.
   const frontmatter = {
     timestamp: "2026-09-11T19:14:11.222Z",
     sms_message: "تم",
     category: "Uncategorized",
-    status: "needs_review",
+    status: "pending",
     parser_confidence: 0,
     transaction_id: "f36041700d000314",
   };
@@ -184,7 +184,7 @@ test("parserChanges never rewrites a field with the value it already holds", () 
     category: "Uncategorized",
     merchant: "",
     transaction_type: "",
-    status: "needs_review",
+    status: "pending",
     parser_confidence: 0,
     transaction_id: "f36041700d000314",
   };
@@ -194,7 +194,7 @@ test("parserChanges never rewrites a field with the value it already holds", () 
 
 test("parserChanges keeps a value set by hand", () => {
   const record = buildTransaction(
-    { timestamp: "2026-09-11T19:14:11.222Z", merchant: "Cancun Resort", category: "Dining", status: "needs_review" },
+    { timestamp: "2026-09-11T19:14:11.222Z", merchant: "Cancun Resort", category: "Dining", status: "pending" },
     "Budget/Transactions/2026/Sep/11T19-14-11.md",
   );
 
@@ -238,7 +238,7 @@ test("searchBlob finds a recipient and a sender too", () => {
 
 test("parserChanges leaves all three party keys alone once a note names anyone", () => {
   const record = buildTransaction(
-    { timestamp: "2026-09-11T19:14:11.222Z", sender: "ACME Payroll", status: "needs_review" },
+    { timestamp: "2026-09-11T19:14:11.222Z", sender: "ACME Payroll", status: "pending" },
     "Budget/Transactions/2026/Sep/11T19-14-11.md",
   );
 

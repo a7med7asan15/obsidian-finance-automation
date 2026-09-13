@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   totalsByCurrency, spendByCategory, spendByMerchant, spendByDay, spendByMonth,
-  groupByDay, primaryCurrency, counterpartySummary,
+  groupByDay, primaryCurrency, counterpartySummary, categorySummary,
 } from "../src/domain/aggregate.ts";
 import { makeTransaction } from "./helpers/factory.ts";
 
@@ -239,4 +239,32 @@ test("an excluded transaction still lists its party", () => {
   ]);
   assert.equal(rows.length, 1);
   assert.equal(rows[0]!.count, 1);
+});
+
+test("categorySummary gives one row per category, biggest first", () => {
+  const rows = categorySummary([
+    makeTransaction({ category: "Groceries", amount: 100 }),
+    makeTransaction({ category: "Groceries", amount: 250, timestamp: "2026-09-09T10:00:00+03:00" }),
+    makeTransaction({ category: "Dining", amount: 900 }),
+  ]);
+
+  assert.deepEqual(rows.map((row) => row.name), ["Dining", "Groceries"]);
+  assert.equal(rows[1].spent, 350);
+  assert.equal(rows[1].count, 2);
+  assert.equal(rows[1].currency, "EGP");
+  assert.equal(rows[1].lastDate, "2026-09-09");
+});
+
+test("categorySummary keeps money in and money out apart", () => {
+  const [row] = categorySummary([
+    makeTransaction({ category: "Salary", transaction_type: "credit", amount: 20000, to_account: "CIB" }),
+    makeTransaction({ category: "Salary", transaction_type: "fee", amount: 30 }),
+  ]);
+  assert.equal(row.received, 20000);
+  assert.equal(row.spent, 30);
+});
+
+test("a transaction with no category counts as Uncategorized", () => {
+  const rows = categorySummary([makeTransaction({ category: "" })]);
+  assert.deepEqual(rows.map((row) => row.name), ["Uncategorized"]);
 });

@@ -242,3 +242,70 @@ export function counterpartySummary(records: TransactionRecord[]): CounterpartyT
     (a, b) => b.spent + b.received - (a.spent + a.received) || a.name.localeCompare(b.name),
   );
 }
+
+export interface CategoryTotal {
+  name: string;
+  count: number;
+  /** Magnitudes, so both read as positive money. */
+  spent: number;
+  received: number;
+  /** The currency most of this category's transactions are in. */
+  currency: string;
+  lastDate: string | null;
+}
+
+/**
+ * Every category these transactions carry, one row each, biggest first.
+ *
+ * The sibling of `counterpartySummary`, and read the same way: it counts what
+ * the transactions say, so a category with no note of its own still appears,
+ * and a category whose note exists but whose period is empty does not. The
+ * Categories tab adds the notes back, because a category you are about to give
+ * a budget has to be visible before it has been spent against.
+ *
+ * Transfers count as spent, since a category row is about how much money the
+ * name moved, not which direction the bank called it.
+ */
+export function categorySummary(records: TransactionRecord[]): CategoryTotal[] {
+  const buckets = new Map<string, CategoryTotal & { currencies: Map<string, number> }>();
+
+  for (const record of records) {
+    const name = record.category || "Uncategorized";
+    let bucket = buckets.get(name);
+    if (!bucket) {
+      bucket = {
+        name, count: 0, spent: 0, received: 0, currency: "", lastDate: null,
+        currencies: new Map<string, number>(),
+      };
+      buckets.set(name, bucket);
+    }
+
+    bucket.count += 1;
+    const value = magnitude(record);
+    if (record.type === "credit") bucket.received += value;
+    else bucket.spent += value;
+    if (record.currency) {
+      bucket.currencies.set(record.currency, (bucket.currencies.get(record.currency) ?? 0) + 1);
+    }
+    if (record.date && (!bucket.lastDate || record.date > bucket.lastDate)) {
+      bucket.lastDate = record.date;
+    }
+  }
+
+  const totals: CategoryTotal[] = [];
+  for (const bucket of buckets.values()) {
+    const ranked = [...bucket.currencies].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+    totals.push({
+      name: bucket.name,
+      count: bucket.count,
+      spent: bucket.spent,
+      received: bucket.received,
+      currency: ranked[0]?.[0] ?? "",
+      lastDate: bucket.lastDate,
+    });
+  }
+
+  return totals.sort(
+    (a, b) => b.spent + b.received - (a.spent + a.received) || a.name.localeCompare(b.name),
+  );
+}

@@ -1,5 +1,5 @@
 import { Menu, Notice, setIcon } from "obsidian";
-import { applyFilter, countNeedingReview } from "../../domain/filter.ts";
+import { applyFilter } from "../../domain/filter.ts";
 import { groupByDay, totalsByCurrency } from "../../domain/aggregate.ts";
 import { cairoToday } from "../../domain/dates.ts";
 import { formatAmount, formatDayHeader } from "../format.ts";
@@ -29,9 +29,6 @@ export class TransactionsTab {
     const categories = new Map(this.plugin.index.categories().map((item) => [item.name, item]));
 
     new SummaryStrip().render(container, totalsByCurrency(filtered));
-
-    const review = countNeedingReview(filtered);
-    if (review > 0) this.renderReviewBanner(container, review);
 
     if (!filtered.length) {
       renderEmptyState(
@@ -77,19 +74,6 @@ export class TransactionsTab {
     }
 
     this.renderAddButton(container);
-  }
-
-  private renderReviewBanner(container: HTMLElement, count: number): void {
-    const banner = container.createDiv({ cls: "fin-banner" });
-    const icon = banner.createSpan({ cls: "fin-banner-icon" });
-    setIcon(icon, "alert-triangle");
-    banner.createSpan({
-      text: `${count} transaction${count === 1 ? "" : "s"} need${count === 1 ? "s" : ""} review`,
-    });
-    const action = banner.createEl("button", { cls: "fin-banner-action", text: "Show" });
-    action.addEventListener("click", () => {
-      this.plugin.store.set({ statuses: ["needs_review", "pending"] });
-    });
   }
 
   private renderAddButton(container: HTMLElement): void {

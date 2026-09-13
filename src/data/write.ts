@@ -60,3 +60,39 @@ export async function updateCategoryNote(
     if (changes.monthly_budget !== undefined) frontmatter.monthly_budget = changes.monthly_budget;
   });
 }
+
+/**
+ * The account fields the editor owns, by their frontmatter names. A key left
+ * out is not touched; a key set to null is removed, which is how a note says
+ * "no statement figure" or "no opening date" rather than carrying a zero that
+ * would read as a real one.
+ */
+export interface AccountNoteChanges {
+  name?: string;
+  currency?: string;
+  account_type?: string;
+  institution?: string;
+  card_endings?: string[];
+  aliases?: string[];
+  opening_balance?: number;
+  opening_date?: string | null;
+  balance?: number | null;
+  balance_updated_at?: string | null;
+  active?: boolean;
+  include_in_net_worth?: boolean;
+}
+
+export async function updateAccountNote(
+  app: App,
+  path: string,
+  changes: AccountNoteChanges,
+): Promise<void> {
+  await editFrontMatter(app, path, (frontmatter) => {
+    for (const [key, value] of Object.entries(changes)) {
+      if (value === undefined) continue;
+      // `false` is a value an account keeps; only null means "drop the key".
+      if (value === null) delete frontmatter[key];
+      else frontmatter[key] = value;
+    }
+  });
+}

@@ -15,6 +15,18 @@ export function formatAmount(amount: number): string {
   return AMOUNT_FORMAT.format(Math.abs(amount));
 }
 
+/**
+ * The magnitude with a minus sign in front when the value is negative.
+ *
+ * `formatAmount` deliberately drops the sign, because a transaction says which
+ * way the money went with its colour and its own + or −. A balance does not: an
+ * account that is 350 overdrawn and one holding 350 are different accounts, so
+ * anything that can legitimately be negative is formatted through here.
+ */
+export function formatSignedAmount(amount: number): string {
+  return `${amount < 0 ? "\u2212" : ""}${formatAmount(amount)}`;
+}
+
 export function formatMoney(amount: number, currency: string): string {
   return currency ? `${formatAmount(amount)} ${currency}` : formatAmount(amount);
 }
