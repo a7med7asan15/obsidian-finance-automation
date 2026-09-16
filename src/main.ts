@@ -9,7 +9,7 @@ import {
 import { registerFinanceCodeBlock } from "./codeblock.ts";
 import { TransactionIndex } from "./data/index-store.ts";
 import { createCategoryNote } from "./data/categories.ts";
-import { createRawSmsTransaction, createStructuredTransaction } from "./data/create.ts";
+import { createRawSmsTransaction, createStructuredTransaction, protocolMessage } from "./data/create.ts";
 import type { ProtocolParams } from "./data/create.ts";
 import { describeInbox, ingestInbox } from "./data/inbox.ts";
 import { isTransactionPath, parserChanges } from "./data/records.ts";
@@ -23,6 +23,7 @@ import { isPlaceholderAccount, mergeAccountSources, parseSms } from "./domain/pa
 import { counterpartyFields, readCounterparty } from "./domain/counterparty.ts";
 import { sameName } from "./domain/names.ts";
 import { withDefaultPatterns } from "./domain/parser/defaults.ts";
+import { isTransactionMessage } from "./domain/parser/relevance.ts";
 import type { AccountConfig, CategoryRules, SmsPatterns } from "./domain/parser/sms.ts";
 import { DEFAULT_SETTINGS, FinanceAutomationSettingTab } from "./settings.ts";
 import { FilterStore } from "./store/filter-store.ts";
@@ -253,10 +254,22 @@ export default class FinanceAutomationPlugin extends Plugin {
 
   private async handleCaptureLink(kind: "sms" | "transaction", params: ProtocolParams): Promise<void> {
     try {
-      const file: TFile =
-        kind === "sms"
-          ? await createRawSmsTransaction(this.app, params, await this.loadPatterns())
-          : await createStructuredTransaction(this.app, params);
+      let file: TFile;
+      if (kind === "sms") {
+        // The same gate the inbox uses, at the other door: a link carrying a
+        // statement reminder or a one-time code leaves no note behind. A link
+        // is one deliberate message rather than a swept folder, so it says so
+        // instead of disappearing quietly.
+        const patterns = await this.loadPatterns();
+        const message = protocolMessage(params);
+        if (message && !isTransactionMessage(message, patterns)) {
+          new Notice("Finance: ignored — that message is not about money moving.", 6000);
+          return;
+        }
+        file = await createRawSmsTransaction(this.app, params, patterns);
+      } else {
+        file = await createStructuredTransaction(this.app, params);
+      }
       new Notice(`Finance: captured ${file.path}.`, 5000);
     } catch (error) {
       console.error("Finance capture link failed", error);

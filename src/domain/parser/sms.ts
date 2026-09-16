@@ -6,6 +6,12 @@ import type { AccountRecord, TransactionType } from "../../data/types.ts";
 export type { CategoryRules };
 
 export interface SmsPatterns {
+  /**
+   * What a message must say before it is read as a transaction at all. A
+   * capture that matches none of these is dropped rather than parsed; see
+   * `isTransactionMessage`.
+   */
+  transaction_keywords?: string[];
   credit_keywords?: string[];
   debit_keywords?: string[];
   transfer_keywords?: string[];
@@ -206,8 +212,15 @@ export function parseSms(
   if (transactionType === "debit" || transactionType === "fee") fromAccount = candidates[0] ?? "";
   else if (transactionType === "credit") toAccount = candidates[0] ?? "";
   else if (transactionType === "transfer") {
-    fromAccount = candidates[0] ?? "";
-    toAccount = candidates[1] ?? "";
+    // A transfer names one account of yours far more often than two, and which
+    // side it belongs on is the whole difference between money in and money
+    // out. The bank says so in the same breath — "إلى حسابك" against "من
+    // حسابك", "to your account" against "from your account" — so the credit
+    // and debit keywords place it, and only a message that says neither falls
+    // back to the order the accounts were found in.
+    const incoming = isCredit && !isDebit;
+    fromAccount = incoming ? (candidates[1] ?? "") : (candidates[0] ?? "");
+    toAccount = incoming ? (candidates[0] ?? "") : (candidates[1] ?? "");
   }
 
   let category = categorize(`${sms}\n${counterparty}`, categories);

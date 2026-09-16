@@ -1,7 +1,8 @@
 import { normalizePath } from "obsidian";
 import type { App } from "obsidian";
 import { INBOX_DIR } from "../constants.ts";
-import { createRawSmsTransaction } from "./create.ts";
+import { createRawSmsTransaction, decodePercentEscapes } from "./create.ts";
+import { isTransactionMessage } from "../domain/parser/relevance.ts";
 import type { SmsPatterns } from "../domain/parser/sms.ts";
 
 /** Extensions a Shortcut can realistically save a message as. */
@@ -23,6 +24,8 @@ export interface InboxResult {
   created: string[];
   /** Spool files left in place because they held no message. */
   empty: string[];
+  /** Spool files deleted unread: the message was not about money moving. */
+  ignored: string[];
   failed: Array<{ path: string; error: string }>;
 }
 
@@ -45,9 +48,16 @@ function extensionOf(path: string): string {
  * survives verbatim in `sms_message` and the Original SMS block. A file that
  * fails is left where it is, so a capture is never consumed without a note to
  * show for it.
+ *
+ * A capture that says nothing about money moving — a statement reminder, a due
+ * date, a one-time code, an offer — never becomes a note. A bank thread is
+ * mostly those, and they carry amounts and card numbers, so left alone they
+ * arrive as transactions that never happened. Its spool file is deleted rather
+ * than left behind, because a Shortcut that forwards the whole thread would
+ * otherwise silt the inbox up with the same messages every run.
  */
 export async function ingestInbox(app: App, patterns: SmsPatterns = {}): Promise<InboxResult> {
-  const result: InboxResult = { created: [], empty: [], failed: [] };
+  const result: InboxResult = { created: [], empty: [], ignored: [], failed: [] };
   const directory = normalizePath(INBOX_DIR);
   const adapter = app.vault.adapter;
   if (!(await adapter.exists(directory))) return result;
@@ -59,9 +69,17 @@ export async function ingestInbox(app: App, patterns: SmsPatterns = {}): Promise
     if (!CAPTURE_EXTENSIONS.has(extensionOf(path))) continue;
     if (NEVER_A_MESSAGE.has(basenameOf(path))) continue;
     try {
-      const message = (await adapter.read(path)).trim();
+      // Decoded first: a Shortcut can spool a message still in its percent
+      // spelling, and `تم خصم` reads as `%D8%AA...` until it is decoded, which
+      // no keyword would ever match.
+      const message = decodePercentEscapes((await adapter.read(path)).trim());
       if (!message) {
         result.empty.push(path);
+        continue;
+      }
+      if (!isTransactionMessage(message, patterns)) {
+        await adapter.remove(path);
+        result.ignored.push(path);
         continue;
       }
       const file = await createRawSmsTransaction(app, { message }, patterns);
@@ -78,6 +96,7 @@ export async function ingestInbox(app: App, patterns: SmsPatterns = {}): Promise
 export function describeInbox(result: InboxResult): string | null {
   const parts: string[] = [];
   if (result.created.length) parts.push(`captured ${result.created.length} message(s) from the inbox`);
+  if (result.ignored.length) parts.push(`discarded ${result.ignored.length} non-transaction message(s)`);
   if (result.failed.length) parts.push(`${result.failed.length} failed`);
   if (result.empty.length) parts.push(`${result.empty.length} empty file(s) left in place`);
   return parts.length ? parts.join(", ") : null;

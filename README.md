@@ -125,10 +125,32 @@ runs after whatever that file holds, so a bank's ordinary phrasing is understood
 the box and a pattern written by hand still takes precedence.
 
 The direction of the money is read the same way. `debit_keywords`, `credit_keywords`,
-`transfer_keywords` and `fee_keywords` in that file decide it, and the two Arabic wordings
-for money leaving an account — `من حسابك` and `تم خصم` — are built in, so either one on
-its own reads as spending whether or not the vault file lists it. A transfer still wins:
-`تم تحويل 500 من حسابك` stays a transfer rather than becoming spending.
+`transfer_keywords` and `fee_keywords` in that file decide it, and the account wordings are
+built in on both sides — `من حسابك`, `تم خصم`, `from your account` for money leaving, and
+`إلى حسابك`, `to your account` for money arriving — so either reads correctly whether or not
+the vault file lists it. A transfer still wins the type: `تم تحويل 500 من حسابك` stays a
+transfer rather than becoming spending. Which side of that transfer your own account sits on
+comes from those same keywords, so `تم تنفيذ تحويل لحظي ... إلى حسابك` is money in and the
+same sentence with `من حسابك` is money out.
+
+Arabic is matched with its spellings folded together: `إلى`, `الى` and `الي` are one phrase,
+as are `بطاقة` and `بطاقه`, and the runs of spaces a bank pads a message with are collapsed.
+A keyword can be written whichever way reads best.
+
+## What counts as a transaction
+
+A bank thread is mostly not transactions — statement reminders, due dates, one-time codes,
+offers — and those carry amounts and card numbers too, so a reminder to pay a minimum of
+`1 جم` would otherwise be filed as a 1 EGP transaction that never happened. A capture
+becomes a note only when it says money actually moved: `تم خصم`, `من حسابك`, `إلى حسابك`,
+`تم تنفيذ تحويل`, `charged`, `debited`, `credited`, `transferred` and the rest of the
+built-in list. Anything else is dropped, and its file in `Budget/Inbox` is deleted rather
+than left to be re-read every run; the notice says how many were discarded. A capture link
+carrying such a message says so instead of leaving a note behind.
+
+Add `transaction_keywords` to `Budget/Settings/sms_patterns.json` to let an unusual wording
+through — the built-in list is appended to whatever that file holds, so an entry there widens
+the gate rather than replacing it.
 
 A transaction that reached `status: parsed` is never parsed again, so notes filed before
 the parser knew a wording keep an empty party key. **Fill in missing merchants from

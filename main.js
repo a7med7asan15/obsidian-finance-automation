@@ -704,9 +704,15 @@ function extractByPatterns(text, patterns) {
   }
   return null;
 }
+function foldForMatch(text) {
+  return String(text ?? "").toLocaleLowerCase().replace(/[ً-ْـ]/gu, "").replace(/[أإآٱ]/gu, "\u0627").replace(/[ىی]/gu, "\u064A").replace(/ة/gu, "\u0647").replace(/\s+/gu, " ").trim();
+}
 function hasKeyword(text, keywords) {
-  const folded = text.toLocaleLowerCase();
-  return (keywords ?? []).some((word) => folded.includes(String(word).toLocaleLowerCase()));
+  const folded = foldForMatch(text);
+  return (keywords ?? []).some((word) => {
+    const needle = foldForMatch(word);
+    return Boolean(needle) && folded.includes(needle);
+  });
 }
 
 // src/domain/names.ts
@@ -920,8 +926,9 @@ function parseSms(sms, timestamp, config, patterns, accounts, categories) {
   if (transactionType === "debit" || transactionType === "fee") fromAccount = candidates[0] ?? "";
   else if (transactionType === "credit") toAccount = candidates[0] ?? "";
   else if (transactionType === "transfer") {
-    fromAccount = candidates[0] ?? "";
-    toAccount = candidates[1] ?? "";
+    const incoming = isCredit && !isDebit;
+    fromAccount = incoming ? candidates[1] ?? "" : candidates[0] ?? "";
+    toAccount = incoming ? candidates[0] ?? "" : candidates[1] ?? "";
   }
   let category = categorize(`${sms}
 ${counterparty}`, categories);
@@ -1645,6 +1652,46 @@ async function deleteCategoryNote(app, path) {
 
 // src/data/inbox.ts
 var import_obsidian6 = require("obsidian");
+
+// src/domain/parser/relevance.ts
+var DEFAULT_TRANSACTION_KEYWORDS = [
+  // Money leaving.
+  "\u062A\u0645 \u062E\u0635\u0645",
+  "\u062E\u0635\u0645 \u0645\u0646 \u062D\u0633\u0627\u0628\u0643",
+  "\u0645\u0646 \u062D\u0633\u0627\u0628\u0643",
+  "\u0645\u0646 \u0628\u0637\u0627\u0642\u062A\u0643",
+  "\u062A\u0645 \u0633\u062D\u0628",
+  "\u0633\u062D\u0628 \u0645\u0646 \u062D\u0633\u0627\u0628\u0643",
+  "\u062A\u0645 \u0634\u0631\u0627\u0621",
+  "\u062A\u0645 \u062F\u0641\u0639",
+  "from your account",
+  "from your card",
+  "charged",
+  "debited",
+  "withdrawn",
+  "withdrawal",
+  "purchase",
+  // Money arriving.
+  "\u0625\u0644\u0649 \u062D\u0633\u0627\u0628\u0643",
+  "\u0644\u062D\u0633\u0627\u0628\u0643",
+  "\u062A\u0645 \u0625\u064A\u062F\u0627\u0639",
+  "\u062A\u0645 \u0627\u0636\u0627\u0641\u0629",
+  "to your account",
+  "to your card",
+  "credited",
+  "deposited",
+  "refunded",
+  // Either way.
+  "\u062A\u0645 \u062A\u0646\u0641\u064A\u0630 \u062A\u062D\u0648\u064A\u0644",
+  "\u062A\u0645 \u062A\u062D\u0648\u064A\u0644",
+  "transferred"
+];
+function isTransactionMessage(sms, patterns = {}) {
+  const keywords = patterns.transaction_keywords?.length ? patterns.transaction_keywords : DEFAULT_TRANSACTION_KEYWORDS;
+  return hasKeyword(sms, keywords);
+}
+
+// src/data/inbox.ts
 var CAPTURE_EXTENSIONS = /* @__PURE__ */ new Set(["txt", "md", "text", "log"]);
 var NEVER_A_MESSAGE = /* @__PURE__ */ new Set(["readme.md"]);
 function basenameOf(path) {
@@ -1656,7 +1703,7 @@ function extensionOf(path) {
   return dot > slash ? path.slice(dot + 1).toLowerCase() : "";
 }
 async function ingestInbox(app, patterns = {}) {
-  const result = { created: [], empty: [], failed: [] };
+  const result = { created: [], empty: [], ignored: [], failed: [] };
   const directory = (0, import_obsidian6.normalizePath)(INBOX_DIR);
   const adapter = app.vault.adapter;
   if (!await adapter.exists(directory)) return result;
@@ -1665,9 +1712,14 @@ async function ingestInbox(app, patterns = {}) {
     if (!CAPTURE_EXTENSIONS.has(extensionOf(path))) continue;
     if (NEVER_A_MESSAGE.has(basenameOf(path))) continue;
     try {
-      const message = (await adapter.read(path)).trim();
+      const message = decodePercentEscapes((await adapter.read(path)).trim());
       if (!message) {
         result.empty.push(path);
+        continue;
+      }
+      if (!isTransactionMessage(message, patterns)) {
+        await adapter.remove(path);
+        result.ignored.push(path);
         continue;
       }
       const file = await createRawSmsTransaction(app, { message }, patterns);
@@ -1682,6 +1734,7 @@ async function ingestInbox(app, patterns = {}) {
 function describeInbox(result) {
   const parts = [];
   if (result.created.length) parts.push(`captured ${result.created.length} message(s) from the inbox`);
+  if (result.ignored.length) parts.push(`discarded ${result.ignored.length} non-transaction message(s)`);
   if (result.failed.length) parts.push(`${result.failed.length} failed`);
   if (result.empty.length) parts.push(`${result.empty.length} empty file(s) left in place`);
   return parts.length ? parts.join(", ") : null;
@@ -1804,7 +1857,9 @@ var DEFAULT_PARTY_PATTERNS = {
   ]
 };
 var DEFAULT_KEYWORDS = {
-  debit_keywords: ["\u0645\u0646 \u062D\u0633\u0627\u0628\u0643", "\u062A\u0645 \u062E\u0635\u0645"]
+  debit_keywords: ["\u0645\u0646 \u062D\u0633\u0627\u0628\u0643", "\u0645\u0646 \u0628\u0637\u0627\u0642\u062A\u0643", "\u062A\u0645 \u062E\u0635\u0645", "from your account", "from your card"],
+  credit_keywords: ["\u0625\u0644\u0649 \u062D\u0633\u0627\u0628\u0643", "\u0644\u062D\u0633\u0627\u0628\u0643", "to your account", "to your card"],
+  transaction_keywords: DEFAULT_TRANSACTION_KEYWORDS
 };
 function withDefaultPatterns(patterns) {
   const merged = { ...patterns };
@@ -4869,7 +4924,18 @@ var FinanceAutomationPlugin = class extends import_obsidian25.Plugin {
   }
   async handleCaptureLink(kind, params) {
     try {
-      const file = kind === "sms" ? await createRawSmsTransaction(this.app, params, await this.loadPatterns()) : await createStructuredTransaction(this.app, params);
+      let file;
+      if (kind === "sms") {
+        const patterns = await this.loadPatterns();
+        const message = protocolMessage(params);
+        if (message && !isTransactionMessage(message, patterns)) {
+          new import_obsidian25.Notice("Finance: ignored \u2014 that message is not about money moving.", 6e3);
+          return;
+        }
+        file = await createRawSmsTransaction(this.app, params, patterns);
+      } else {
+        file = await createStructuredTransaction(this.app, params);
+      }
       new import_obsidian25.Notice(`Finance: captured ${file.path}.`, 5e3);
     } catch (error) {
       console.error("Finance capture link failed", error);

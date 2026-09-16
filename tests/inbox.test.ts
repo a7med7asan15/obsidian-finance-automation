@@ -38,20 +38,20 @@ test("a message still in its encoded spelling is decoded on the way in", async (
 
 test("no inbox folder is not an error", async () => {
   const result = await ingestInbox(fakeApp());
-  assert.deepEqual(result, { created: [], empty: [], failed: [] });
+  assert.deepEqual(result, { created: [], empty: [], ignored: [], failed: [] });
 });
 
 test("captures arrive in the order the messages were spooled", async () => {
   const app = fakeApp();
-  app.vault.files.set("Budget/Inbox/2026-09-12-110000.txt", "second EGP 20");
-  app.vault.files.set("Budget/Inbox/2026-09-12-090000.txt", "first EGP 10");
+  app.vault.files.set("Budget/Inbox/2026-09-12-110000.txt", "Card *7147 was charged for EGP 20 at second");
+  app.vault.files.set("Budget/Inbox/2026-09-12-090000.txt", "Card *7147 was charged for EGP 10 at first");
 
   const result = await ingestInbox(app);
 
   assert.equal(result.created.length, 2);
   const bodies = result.created.map((path) => app.vault.files.get(path) ?? "");
-  assert.match(bodies[0], /first EGP 10/);
-  assert.match(bodies[1], /second EGP 20/);
+  assert.match(bodies[0], /at first/);
+  assert.match(bodies[1], /at second/);
 });
 
 test("an empty file is left in place rather than becoming a blank transaction", async () => {
@@ -68,7 +68,7 @@ test("an empty file is left in place rather than becoming a blank transaction", 
 test("only message-shaped files are read", async () => {
   const app = fakeApp();
   app.vault.files.set("Budget/Inbox/screenshot.png", "binary");
-  app.vault.files.set("Budget/Inbox/note.md", "EGP 5 debit");
+  app.vault.files.set("Budget/Inbox/note.md", "Card *7147 was charged for EGP 5");
 
   const result = await ingestInbox(app);
 
@@ -79,7 +79,7 @@ test("only message-shaped files are read", async () => {
 test("the folder README is never read as a message", async () => {
   const app = fakeApp();
   app.vault.files.set("Budget/Inbox/README.md", "# Inbox\n\nDrop bank messages here.");
-  app.vault.files.set("Budget/Inbox/msg.txt", "EGP 7 debit");
+  app.vault.files.set("Budget/Inbox/msg.txt", "Card *7147 was charged for EGP 7");
 
   const result = await ingestInbox(app);
 
@@ -89,7 +89,7 @@ test("the folder README is never read as a message", async () => {
 
 test("a failed capture keeps its spool file so nothing is consumed silently", async () => {
   const app = fakeApp();
-  app.vault.files.set("Budget/Inbox/boom.txt", "EGP 1");
+  app.vault.files.set("Budget/Inbox/boom.txt", "Card *7147 was charged for EGP 1");
   app.vault.create = async () => {
     throw new Error("disk full");
   };
@@ -103,9 +103,76 @@ test("a failed capture keeps its spool file so nothing is consumed silently", as
 });
 
 test("describeInbox stays quiet when the inbox was empty", () => {
-  assert.equal(describeInbox({ created: [], empty: [], failed: [] }), null);
+  assert.equal(describeInbox({ created: [], empty: [], ignored: [], failed: [] }), null);
   assert.equal(
-    describeInbox({ created: ["a", "b"], empty: ["c"], failed: [] }),
+    describeInbox({ created: ["a", "b"], empty: ["c"], ignored: [], failed: [] }),
     "captured 2 message(s) from the inbox, 1 empty file(s) left in place",
   );
+  assert.equal(
+    describeInbox({ created: [], empty: [], ignored: ["a", "b"], failed: [] }),
+    "discarded 2 non-transaction message(s)",
+  );
+});
+
+// --- messages that are not transactions ---
+
+const MINIMUM_DUE =
+  "عميلنا العزيز،\nنذكركم بضرورة سداد الحد الأدنى وقدره 1 جم على بطاقتكم المغطاة التي تنتهي بـ 7147 " +
+  "الخاص بكشف حساب شهر اغسطس - 2026 في موعد أقصاه يوم 25/9/2026 .";
+
+test("a statement reminder is deleted rather than filed as a 1 EGP transaction", async () => {
+  const app = fakeApp();
+  app.vault.files.set("Budget/Inbox/reminder.txt", MINIMUM_DUE);
+
+  const result = await ingestInbox(app);
+
+  assert.deepEqual(result.created, []);
+  assert.deepEqual(result.ignored, ["Budget/Inbox/reminder.txt"]);
+  assert.equal(app.vault.files.has("Budget/Inbox/reminder.txt"), false);
+});
+
+test("a one-time code is deleted even though it carries digits", async () => {
+  const app = fakeApp();
+  app.vault.files.set("Budget/Inbox/otp.txt", "Your one-time code is 4829. Valid for 5 minutes.");
+
+  const result = await ingestInbox(app);
+
+  assert.deepEqual(result.created, []);
+  assert.deepEqual(result.ignored, ["Budget/Inbox/otp.txt"]);
+});
+
+test("a real transaction alongside the noise is the only one kept", async () => {
+  const app = fakeApp();
+  app.vault.files.set("Budget/Inbox/1-reminder.txt", MINIMUM_DUE);
+  app.vault.files.set("Budget/Inbox/2-debit.txt", "تم خصم EGP 350.00 من بطاقة الخصم المباشر # **0779");
+  app.vault.files.set("Budget/Inbox/3-offer.txt", "اربح رحلة مجانية مع عروض الصيف! اتصل بـ 19666");
+
+  const result = await ingestInbox(app);
+
+  assert.equal(result.created.length, 1);
+  assert.deepEqual(result.ignored, ["Budget/Inbox/1-reminder.txt", "Budget/Inbox/3-offer.txt"]);
+  const left = [...app.vault.files.keys()].filter((path) => path.startsWith("Budget/Inbox/"));
+  assert.deepEqual(left, []);
+});
+
+test("an encoded message is decoded before the keywords are looked for", async () => {
+  const app = fakeApp();
+  app.vault.files.set("Budget/Inbox/encoded.txt", ENCODED_SMS);
+
+  const result = await ingestInbox(app);
+
+  assert.equal(result.created.length, 1);
+  assert.deepEqual(result.ignored, []);
+});
+
+test("the vault's own transaction_keywords let an unusual wording through", async () => {
+  const app = fakeApp();
+  app.vault.files.set("Budget/Inbox/odd.txt", "Votre compte a été prélevé de EGP 40");
+
+  const before = await ingestInbox(app);
+  assert.deepEqual(before.created, []);
+
+  app.vault.files.set("Budget/Inbox/odd.txt", "Votre compte a été prélevé de EGP 40");
+  const after = await ingestInbox(app, { transaction_keywords: ["prélevé"] });
+  assert.equal(after.created.length, 1);
 });

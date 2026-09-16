@@ -52,6 +52,16 @@ The file is deleted only after its note is on disk, so a capture is never consum
 a note to show for it. An empty file is left alone, and a file whose note could not be
 written stays put for the next pass.
 
+Not every file becomes a note. A message has to say that money actually moved — `تم خصم`,
+`من حسابك`, `إلى حسابك`, `تم تنفيذ تحويل`, `charged`, `debited`, `credited`, `transferred`
+and the rest of the built-in list — before it is worth parsing. A statement reminder, a due
+date, a one-time code or an offer carries an amount and a card number too, so left alone it
+would arrive as a transaction that never happened; instead it is discarded and its file
+deleted, and the notice counts how many. Forward the whole bank thread if that is easier:
+only the transactions in it will land. Add `transaction_keywords` to
+`Budget/Settings/sms_patterns.json` if your bank uses a wording the built-in list misses —
+entries there are tried alongside the built-in ones, never instead of them.
+
 To pull the inbox in by hand, run **Import messages from the SMS inbox** from the command
 palette.
 
@@ -105,7 +115,9 @@ fills in the rest from the text alone, using
 |---|---|
 | `amount`, `currency` | `amount_patterns`, falling back to `default_currency` in `config.json` |
 | `from_account` / `to_account` | `card_ending_patterns` — the account or card number in the message, looked up in `card_endings` on the account notes in `Budget/Accounts/` |
+| whether it is parsed at all | `transaction_keywords` plus the built-in list — a message that names no money moving is discarded |
 | `transaction_type` | the `debit`, `credit`, `transfer`, and `fee` keyword lists |
+| which side of a transfer your account is on | the `debit` and `credit` keywords — `من حسابك` is money out, `إلى حسابك` money in |
 | `merchant`, `recipient` or `sender` | `merchant_patterns`, `recipient_patterns`, `sender_patterns` — whichever the type calls for, plus the built-in patterns |
 | `category` | the keyword rules in `Budget/Settings/Categories/` |
 | `timestamp` | the date in the message when it carries one, otherwise the moment the link opened |
@@ -267,6 +279,7 @@ safe as long as you write their spaces as `%20`.
 | **Black screen and no note, only from the Shortcut** | The link is too long, or it is the thing launching Obsidian. Obsidian never reads the URL iOS launched it with, and a long encoded message stops arriving. Use the inbox. |
 | Nothing happens when the link opens | Plugin not enabled, or Obsidian not restarted since installing it |
 | Inbox file never becomes a note | The file has an extension other than `.txt`, `.md`, `.text` or `.log`, or Save File wrote it outside `Budget/Inbox` |
+| Inbox file vanished and no note appeared | The message named no money moving, so it was discarded — the notice counts these. If it was a real transaction, add its wording to `transaction_keywords` |
 | Note appears but stays `pending` | Processing has not run yet; run **Process pending SMS transactions** |
 | Stays `pending` with no account | The card digits are missing from `card_endings`, or the bank's wording is not in `card_ending_patterns` |
 | SMS note holds only the first word | The automation has no **URL Encode** action, so a space ended the link |

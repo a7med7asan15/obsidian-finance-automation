@@ -24,7 +24,32 @@ export function extractByPatterns(text: string, patterns: string[] | undefined):
   return null;
 }
 
+/**
+ * The spelling two keywords have in common.
+ *
+ * A bank writes the same Arabic word several ways — `إلى حسابك`, `الى حسابك`
+ * and `الي حسابك` are one phrase — and it pads a message with runs of spaces,
+ * so a keyword typed one way has to match a message written another. The alef
+ * and yaa families are folded together, taa marbuta joins haa, the marks a
+ * message may carry are dropped, and every run of whitespace becomes one space.
+ * Both sides of a comparison go through this, so a keyword can be written
+ * whichever way reads best.
+ */
+export function foldForMatch(text: string): string {
+  return String(text ?? "")
+    .toLocaleLowerCase()
+    .replace(/[ً-ْـ]/gu, "")
+    .replace(/[أإآٱ]/gu, "ا")
+    .replace(/[ىی]/gu, "ي")
+    .replace(/ة/gu, "ه")
+    .replace(/\s+/gu, " ")
+    .trim();
+}
+
 export function hasKeyword(text: string, keywords: string[] | undefined): boolean {
-  const folded = text.toLocaleLowerCase();
-  return (keywords ?? []).some((word) => folded.includes(String(word).toLocaleLowerCase()));
+  const folded = foldForMatch(text);
+  return (keywords ?? []).some((word) => {
+    const needle = foldForMatch(word);
+    return Boolean(needle) && folded.includes(needle);
+  });
 }

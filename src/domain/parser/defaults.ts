@@ -1,3 +1,4 @@
+import { DEFAULT_TRANSACTION_KEYWORDS } from "./relevance.ts";
 import type { SmsPatterns } from "./sms.ts";
 
 /**
@@ -33,14 +34,21 @@ export const DEFAULT_PARTY_PATTERNS: Required<
  * patterns, these are the wordings every bank shares rather than the ones a
  * particular vault has to spell out. `من حسابك` ("from your account") and
  * `تم خصم` ("was deducted") both mean money left, so either one on its own is
- * enough to read a message as spending.
+ * enough to read a message as spending; `إلى حسابك` ("to your account") is the
+ * same sentence pointing the other way, so it reads as money arriving.
  *
- * A transfer still wins over a debit — `parseSms` checks the transfer keywords
+ * A transfer still wins over either — `parseSms` checks the transfer keywords
  * first — so "تم تحويل 500 من حسابك إلى ..." stays a transfer rather than
- * becoming spending.
+ * becoming spending. The two lists are not wasted on it: which of them the
+ * message matched is what puts your account on the paying or the receiving
+ * side of that transfer.
  */
-export const DEFAULT_KEYWORDS: Required<Pick<SmsPatterns, "debit_keywords">> = {
-  debit_keywords: ["من حسابك", "تم خصم"],
+export const DEFAULT_KEYWORDS: Required<
+  Pick<SmsPatterns, "debit_keywords" | "credit_keywords" | "transaction_keywords">
+> = {
+  debit_keywords: ["من حسابك", "من بطاقتك", "تم خصم", "from your account", "from your card"],
+  credit_keywords: ["إلى حسابك", "لحسابك", "to your account", "to your card"],
+  transaction_keywords: DEFAULT_TRANSACTION_KEYWORDS,
 };
 
 /**

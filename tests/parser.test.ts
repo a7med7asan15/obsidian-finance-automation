@@ -339,3 +339,66 @@ test("isPlaceholderAccount tells a stand-in card name from a real account", () =
   assert.equal(isPlaceholderAccount("CIB"), false);
   assert.equal(isPlaceholderAccount(""), false);
 });
+
+// --- which side of a transfer your account is on ---
+
+const TRANSFERS: SmsPatterns = {
+  ...PATTERNS,
+  card_ending_patterns: [
+    "(?i)(?:card|acct|account|ending|xx+|\\*+)\\s*(?:no\\.?|number)?\\s*[:#-]?\\s*(?P<ending>[0-9]{4})\\b",
+  ],
+};
+
+const BANK: AccountConfig = {
+  accounts: [{ name: "CIB", currency: "EGP", card_endings: ["1934"], aliases: ["cib"] }],
+};
+
+const transfer = (sms: string) =>
+  parseSms(
+    sms, "2026-09-14T18:11:00+03:00", { default_currency: "EGP" },
+    withDefaultPatterns(TRANSFERS), BANK, CATEGORIES,
+  );
+
+test("an instant transfer into your account lands in to_account", () => {
+  const result = transfer(
+    "يرجى العلم انه تم تنفيذ تحويل لحظي بمبلغ 14000.00 جم إلى حسابك المنتهي بـ ********1934 " +
+      "من AHMED HASSAN ABDALLAH A برقم مرجعي 4182988c بتاريخ 14-09-2026 18:11",
+  );
+  assert.equal(result.transaction_type, "transfer");
+  assert.equal(result.to_account, "CIB");
+  assert.equal(result.from_account, "");
+});
+
+test("an instant transfer out of your account still leaves from_account", () => {
+  const result = transfer(
+    "يرجى العلم انه تم تنفيذ تحويل لحظي بمبلغ 11000.00 جم من حسابك المنتهي بـ ********1934 " +
+      "برقم مرجعي 42b4213f بتاريخ 14-09-2026 15:36",
+  );
+  assert.equal(result.transaction_type, "transfer");
+  assert.equal(result.from_account, "CIB");
+  assert.equal(result.to_account, "");
+});
+
+test("'الى' and 'الي' are the same phrase as 'إلى'", () => {
+  for (const spelling of ["إلى حسابك", "الى حسابك", "الي حسابك"]) {
+    const result = transfer(`تم تنفيذ تحويل لحظي بمبلغ 500.00 جم ${spelling} المنتهي بـ ********1934`);
+    assert.equal(result.to_account, "CIB", spelling);
+  }
+});
+
+test("a transfer that names neither side keeps the order the accounts were found in", () => {
+  const result = transfer("Transfer of EGP 500 processed on account ****1934");
+  assert.equal(result.from_account, "CIB");
+  assert.equal(result.to_account, "");
+});
+
+test("the direction keywords survive the runs of spaces a bank pads with", () => {
+  const result = transfer("تم تنفيذ تحويل لحظي بمبلغ 500.00 جم  إلى   حسابك  المنتهي بـ ********1934");
+  assert.equal(result.to_account, "CIB");
+});
+
+test("an English debit is unaffected by the incoming-transfer rule", () => {
+  const result = parse("Card 0774 purchase amount EGP 1,420.50 at Carrefour on 05/09");
+  assert.equal(result.from_account, "CIB");
+  assert.equal(result.to_account, "");
+});
