@@ -12,6 +12,7 @@ diffable, syncable, and yours after the plugin is gone.
 ## Contents
 
 - [What it does](#what-it-does)
+- [Screenshots](#screenshots)
 - [Install](#install)
 - [Quick start](#quick-start) — creating the files it needs
 - [Usage](#usage) — the Budget view, commands, embeds
@@ -43,6 +44,29 @@ diffable, syncable, and yours after the plugin is gone.
 
 Works identically on desktop and mobile. No Python, no desktop-only APIs, no network
 requests, no telemetry.
+
+---
+
+## Screenshots
+
+*Sample data — the figures and names below are invented.*
+
+**Transactions**, grouped by day, with the month's income, expenses and net across the top.
+
+![The Transactions tab, showing a day-grouped list of transactions with a summary strip](docs/images/transactions.png)
+
+**Merchants**, every name the messages produced, largest first. Choosing a category here files
+every transaction of that name and teaches the keyword rules to file the next one on its own.
+
+![The Merchants tab, each name with its total and a category dropdown](docs/images/merchants.png)
+
+**Categories**, the same money read by category, with what each one spent and its budget.
+
+![The Categories tab, each category with its total and edit controls](docs/images/categories.png)
+
+**Stats**, where the money went over the period.
+
+![The Stats tab, with money in and out, and a donut chart of spending by category](docs/images/stats.png)
 
 ---
 
