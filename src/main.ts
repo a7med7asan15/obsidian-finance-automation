@@ -31,13 +31,22 @@ import type { BudgetTab } from "./ui/budget-view.ts";
 import { AddTransactionModal } from "./ui/components/add-transaction-modal.ts";
 import { RulesEditorModal } from "./ui/components/rules-editor.ts";
 import { TransactionSheet } from "./ui/components/transaction-sheet.ts";
-import type { TransactionRecord } from "./data/types.ts";
+import type { Filter, TransactionRecord } from "./data/types.ts";
 import type { FinanceSettings } from "./settings.ts";
 
 const SMS_PATTERNS_PATH = `${SETTINGS_DIR}/sms_patterns.json`;
 
 interface VaultConfig {
   default_currency?: string;
+}
+
+/**
+ * What `loadData` gives back: the settings, plus the filter the Budget view
+ * was last left on. `loadData` is typed `any`, so the shape is asserted once
+ * here rather than spreading unchecked values through onload.
+ */
+interface PluginData extends Partial<FinanceSettings> {
+  filter?: Partial<Filter> | null;
 }
 
 export default class FinanceAutomationPlugin extends Plugin {
@@ -55,7 +64,7 @@ export default class FinanceAutomationPlugin extends Plugin {
   private readonly ignoreWatchUntil = new Map<string, number>();
 
   override async onload(): Promise<void> {
-    const data = (await this.loadData()) ?? {};
+    const data = ((await this.loadData()) as PluginData | null) ?? {};
     this.settings = Object.assign({}, DEFAULT_SETTINGS, data);
     this.index = new TransactionIndex(this.app);
     this.store = new FilterStore(data.filter ?? null);
@@ -65,11 +74,11 @@ export default class FinanceAutomationPlugin extends Plugin {
     this.registerView(BUDGET_VIEW_TYPE, (leaf) => new BudgetView(leaf, this));
     registerFinanceCodeBlock(this);
 
-    this.addRibbonIcon("wallet", "Open Budget", () => void this.activateBudgetView());
+    this.addRibbonIcon("wallet", "Open budget", () => void this.activateBudgetView());
 
     this.addCommand({
       id: "open-budget-view",
-      name: "Open Budget",
+      name: "Open budget",
       callback: () => void this.activateBudgetView(),
     });
 
@@ -78,7 +87,7 @@ export default class FinanceAutomationPlugin extends Plugin {
     // the other case only — the tap-to-fill Shortcut for cash and anything with
     // no SMS behind it.
     this.registerObsidianProtocolHandler("finance-transaction", async (params) => {
-      await this.handleCaptureLink(params as ProtocolParams);
+      await this.handleCaptureLink(params);
     });
 
     this.processIcon = this.addRibbonIcon("refresh-cw", "Process pending SMS transactions", () => {
@@ -201,7 +210,7 @@ export default class FinanceAutomationPlugin extends Plugin {
   async saveSettings(): Promise<void> {
     // Settings live at the top level of plugin data alongside the saved filter,
     // so the whole object is read back before writing.
-    const data = (await this.loadData()) ?? {};
+    const data = ((await this.loadData()) as PluginData | null) ?? {};
     await this.saveData({ ...data, ...this.settings });
   }
 
@@ -248,7 +257,7 @@ export default class FinanceAutomationPlugin extends Plugin {
   }
 
   async persistFilter(): Promise<void> {
-    const data = (await this.loadData()) ?? {};
+    const data = ((await this.loadData()) as PluginData | null) ?? {};
     await this.saveData({ ...data, filter: this.store.serialize() });
   }
 

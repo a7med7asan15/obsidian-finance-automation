@@ -232,7 +232,7 @@ export function counterpartySummary(records: TransactionRecord[]): CounterpartyT
       received: bucket.received,
       currency: ranked[0]?.[0] ?? "",
       categories: [...bucket.categories].sort((a, b) => a.localeCompare(b)),
-      category: bucket.categories.length === 1 ? bucket.categories[0]! : "",
+      category: bucket.categories.length === 1 ? bucket.categories[0] : "",
       lastDate: bucket.lastDate,
       paths: bucket.paths,
     });

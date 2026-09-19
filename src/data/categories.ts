@@ -65,7 +65,7 @@ export async function renameCategoryNote(app: App, path: string, name: string): 
 
   const moved = app.vault.getAbstractFileByPath(wanted);
   if (!(moved instanceof TFile)) throw new Error(`Could not find ${wanted} after renaming.`);
-  await app.fileManager.processFrontMatter(moved, (frontmatter) => {
+  await app.fileManager.processFrontMatter(moved, (frontmatter: Record<string, unknown>) => {
     frontmatter.name = String(name).trim();
   });
   return wanted;

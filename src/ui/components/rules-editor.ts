@@ -2,8 +2,9 @@ import { Modal, Notice, Setting } from "obsidian";
 import type { App } from "obsidian";
 import { loadRules, saveRules } from "../../data/vault-json.ts";
 import { RULE_FIELDS, RULE_OPS, matchesRule, validateRule } from "../../domain/exclusion.ts";
-import type { ExclusionRule, RuleCondition, RuleField, RuleOp } from "../../domain/exclusion.ts";
+import type { ExclusionRule, RuleField, RuleOp } from "../../domain/exclusion.ts";
 import type FinanceAutomationPlugin from "../../main.ts";
+import { on } from "../events.ts";
 
 const FIELD_LABELS: Record<RuleField, string> = {
   sms_message: "SMS text",
@@ -113,7 +114,7 @@ export class RulesEditorModal extends Modal {
     });
 
     const apply = actions.createEl("button", { cls: "mod-cta", text: "Apply to all transactions" });
-    apply.addEventListener("click", async () => {
+    on(apply, "click", async () => {
       const updated = await this.plugin.applyRulesToAll();
       new Notice(`Updated ${updated} transaction${updated === 1 ? "" : "s"}.`);
       this.draw();
@@ -147,7 +148,7 @@ export class RuleEditModal extends Modal {
   ) {
     super(app);
     this.rule = existing
-      ? JSON.parse(JSON.stringify(existing))
+      ? structuredClone(existing)
       : {
           id: `rule-${Date.now().toString(36)}`,
           name: "",
@@ -240,7 +241,7 @@ export class RuleEditModal extends Modal {
 
     const add = contentEl.createEl("button", { cls: "fin-more", text: "Add condition" });
     add.addEventListener("click", () => {
-      this.rule.conditions.push({ field: "sms_message", op: "contains", value: "" } as RuleCondition);
+      this.rule.conditions.push({ field: "sms_message", op: "contains", value: "" });
       this.draw();
     });
 

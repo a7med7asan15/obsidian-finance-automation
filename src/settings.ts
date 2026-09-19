@@ -30,7 +30,7 @@ export class FinanceAutomationSettingTab extends PluginSettingTab {
     // Obsidian already renders the plugin name above this pane, so a heading of
     // our own would only repeat it; the review guidelines ask for none.
     containerEl.createEl("p", {
-      text: "The same local engine runs on desktop and mobile, parsing pending notes and keeping the Budget view up to date.",
+      text: "The same local engine runs on desktop and mobile, parsing pending notes and keeping the budget view up to date.",
     });
 
     new Setting(containerEl)

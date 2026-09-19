@@ -89,7 +89,7 @@ export function registerFinanceCodeBlock(plugin: FinanceAutomationPlugin): void 
         { currency },
       );
 
-      const open = element.createEl("button", { cls: "fin-more", text: "Open Budget" });
+      const open = element.createEl("button", { cls: "fin-more", text: "Open budget" });
       open.addEventListener("click", () => void plugin.activateBudgetView());
     },
   );

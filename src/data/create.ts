@@ -2,6 +2,7 @@ import { TFile, normalizePath } from "obsidian";
 import type { App } from "obsidian";
 import { TRANSACTIONS_DIR } from "../constants.ts";
 import { ensureFolder } from "./vault-json.ts";
+import { asText } from "./frontmatter.ts";
 import { extractTimestamp, normalizeCurrency, stableId } from "../domain/parser/sms.ts";
 import { roleForType } from "../domain/counterparty.ts";
 import type { SmsPatterns } from "../domain/parser/sms.ts";
@@ -13,7 +14,7 @@ const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "
 export type ProtocolParams = Record<string, string>;
 
 function yamlString(value: unknown): string {
-  return JSON.stringify(String(value ?? ""));
+  return JSON.stringify(asText(value));
 }
 
 export function protocolValue(params: ProtocolParams, ...names: string[]): string {

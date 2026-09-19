@@ -649,7 +649,7 @@ function registerFinanceCodeBlock(plugin) {
         })),
         { currency }
       );
-      const open = element.createEl("button", { cls: "fin-more", text: "Open Budget" });
+      const open = element.createEl("button", { cls: "fin-more", text: "Open budget" });
       open.addEventListener("click", () => void plugin.activateBudgetView());
     }
   );
@@ -659,9 +659,18 @@ function registerFinanceCodeBlock(plugin) {
 var import_obsidian2 = require("obsidian");
 
 // src/data/frontmatter.ts
-function readString(value) {
+function asText(value) {
   if (value === null || value === void 0) return "";
-  return String(value).trim();
+  if (typeof value === "string") return value;
+  if (typeof value === "number" || typeof value === "boolean" || typeof value === "bigint") {
+    return String(value);
+  }
+  if (value instanceof Date) return value.toISOString();
+  if (Array.isArray(value)) return value.map((item) => asText(item)).join(",");
+  return "";
+}
+function readString(value) {
+  return asText(value).trim();
 }
 function readNumber(value) {
   if (value === null || value === void 0 || value === "") return null;
@@ -675,7 +684,7 @@ var FALSE_VALUES = /* @__PURE__ */ new Set(["false", "no", "n", "0", "off"]);
 function readBoolean(value, fallback) {
   if (typeof value === "boolean") return value;
   if (value === null || value === void 0 || value === "") return fallback;
-  const text = String(value).trim().toLowerCase();
+  const text = asText(value).trim().toLowerCase();
   if (TRUE_VALUES.has(text)) return true;
   if (FALSE_VALUES.has(text)) return false;
   return fallback;
@@ -877,7 +886,7 @@ function placeholderAccount(ending) {
   return `Card \u2022\u2022\u2022\u2022${ending}`;
 }
 function isPlaceholderAccount(value) {
-  return /^Card ••••[0-9]+$/u.test(String(value ?? "").trim());
+  return /^Card ••••[0-9]+$/u.test(asText(value).trim());
 }
 function accountCandidates(sms, ending, accounts) {
   const folded = sms.toLocaleLowerCase();
@@ -1404,7 +1413,7 @@ async function saveRules(app, rules) {
 // src/data/create.ts
 var MONTHS2 = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 function yamlString(value) {
-  return JSON.stringify(String(value ?? ""));
+  return JSON.stringify(asText(value));
 }
 function protocolValue(params, ...names) {
   for (const name of names) {
@@ -1753,7 +1762,7 @@ var COLUMNS = [
   "file"
 ];
 function cell(value) {
-  const text = value === null || value === void 0 ? "" : String(value);
+  const text = asText(value);
   return /[",\r\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
 }
 function toCsv(records) {
@@ -1873,6 +1882,21 @@ var import_obsidian9 = require("obsidian");
 
 // src/ui/components/rules-editor.ts
 var import_obsidian8 = require("obsidian");
+
+// src/ui/events.ts
+function on(element, type, handler) {
+  element.addEventListener(type, (event) => {
+    void (async () => {
+      try {
+        await handler(event);
+      } catch (error) {
+        console.error(`Ultra Budget Tracker: ${type} handler failed`, error);
+      }
+    })();
+  });
+}
+
+// src/ui/components/rules-editor.ts
 var FIELD_LABELS = {
   sms_message: "SMS text",
   merchant: "Merchant, recipient or sender",
@@ -1965,7 +1989,7 @@ var RulesEditorModal = class extends import_obsidian8.Modal {
       }).open();
     });
     const apply = actions.createEl("button", { cls: "mod-cta", text: "Apply to all transactions" });
-    apply.addEventListener("click", async () => {
+    on(apply, "click", async () => {
       const updated = await this.plugin.applyRulesToAll();
       new import_obsidian8.Notice(`Updated ${updated} transaction${updated === 1 ? "" : "s"}.`);
       this.draw();
@@ -1988,7 +2012,7 @@ var RuleEditModal = class extends import_obsidian8.Modal {
     super(app);
     this.plugin = plugin;
     this.onSave = onSave;
-    this.rule = existing ? JSON.parse(JSON.stringify(existing)) : {
+    this.rule = existing ? structuredClone(existing) : {
       id: `rule-${Date.now().toString(36)}`,
       name: "",
       enabled: true,
@@ -2132,7 +2156,7 @@ var FinanceAutomationSettingTab = class extends import_obsidian9.PluginSettingTa
     const { containerEl } = this;
     containerEl.empty();
     containerEl.createEl("p", {
-      text: "The same local engine runs on desktop and mobile, parsing pending notes and keeping the Budget view up to date."
+      text: "The same local engine runs on desktop and mobile, parsing pending notes and keeping the budget view up to date."
     });
     new import_obsidian9.Setting(containerEl).setName("Process when Obsidian starts").setDesc("Parse pending notes shortly after opening the vault.").addToggle(
       (toggle) => toggle.setValue(this.plugin.settings.runOnStartup).onChange(async (value) => {
@@ -2914,7 +2938,7 @@ var AccountEditorModal = class extends import_obsidian16.Modal {
       })
     );
     new import_obsidian16.Setting(contentEl).setName("Other names").setDesc("Separated by commas. Wordings the bank uses for this account in its messages.").addText(
-      (text) => text.setPlaceholder("cib, current account").setValue(this.draft.aliases).onChange((value) => {
+      (text) => text.setPlaceholder("bank, current account").setValue(this.draft.aliases).onChange((value) => {
         this.draft.aliases = value;
       })
     );
@@ -2941,7 +2965,7 @@ var AccountEditorModal = class extends import_obsidian16.Modal {
         clearProblem();
       });
     });
-    new import_obsidian16.Setting(contentEl).setName("In use").setDesc("A closed account keeps its transactions but leaves the Accounts tab.").addToggle(
+    new import_obsidian16.Setting(contentEl).setName("In use").setDesc("A closed account keeps its transactions but leaves the accounts tab.").addToggle(
       (toggle) => toggle.setValue(this.draft.active).onChange((value) => {
         this.draft.active = value;
       })
@@ -3732,7 +3756,7 @@ var CategoriesTab = class {
     const tools = body.createDiv({ cls: "fin-category-actions" });
     if (!row.note) {
       const create = tools.createEl("button", { cls: "fin-chip", text: "Create its note" });
-      create.addEventListener("click", async () => {
+      on(create, "click", async () => {
         create.disabled = true;
         try {
           await this.plugin.createCategory(row.name);
@@ -3801,7 +3825,7 @@ var CategoriesTab = class {
       });
       swatch.style.background = color;
       swatch.toggleClass("is-active", category.color === color);
-      swatch.addEventListener("click", async () => {
+      on(swatch, "click", async () => {
         try {
           await updateCategoryNote(this.plugin.app, category.path, { color });
           category.color = color;
@@ -3831,7 +3855,7 @@ var CategoriesTab = class {
       text.inputEl.inputMode = "decimal";
       text.setPlaceholder("none");
       text.setValue(category.monthlyBudget === null ? "" : String(category.monthlyBudget));
-      text.inputEl.addEventListener("change", async () => {
+      on(text.inputEl, "change", async () => {
         const raw = text.inputEl.value.trim();
         const parsed = raw === "" ? null : Number(raw.replaceAll(",", ""));
         if (parsed !== null && !Number.isFinite(parsed)) {
@@ -3861,9 +3885,9 @@ var CategoriesTab = class {
     new import_obsidian20.Setting(editor).setName("Keywords").setDesc("Separated by commas. A message containing one of them files itself here.").addTextArea((area) => {
       area.inputEl.addClass("fin-keyword-input");
       area.inputEl.rows = 2;
-      area.setPlaceholder("carrefour, seoudi");
+      area.setPlaceholder("supermarket, grocery");
       area.setValue((current?.keywords ?? []).join(", "));
-      area.inputEl.addEventListener("change", async () => {
+      on(area.inputEl, "change", async () => {
         const next = withKeywords(this.rules, category.name, area.inputEl.value.split(","));
         try {
           await saveCategoryRules(this.plugin.app, next);
@@ -4174,7 +4198,7 @@ var StatsTab = class {
     this.renderBalancePanel(grid);
     const actions = container.createDiv({ cls: "fin-stats-actions" });
     const exportButton = actions.createEl("button", { cls: "fin-more", text: "Export these transactions as CSV" });
-    exportButton.addEventListener("click", async () => {
+    on(exportButton, "click", async () => {
       try {
         const path = await exportCsv(this.plugin.app, records, periodLabel(filter.period));
         new import_obsidian21.Notice(`Exported ${records.length} transactions to ${path}.`);
@@ -4771,10 +4795,10 @@ var FinanceAutomationPlugin = class extends import_obsidian25.Plugin {
     this.setStatus("ready");
     this.registerView(BUDGET_VIEW_TYPE, (leaf) => new BudgetView(leaf, this));
     registerFinanceCodeBlock(this);
-    this.addRibbonIcon("wallet", "Open Budget", () => void this.activateBudgetView());
+    this.addRibbonIcon("wallet", "Open budget", () => void this.activateBudgetView());
     this.addCommand({
       id: "open-budget-view",
-      name: "Open Budget",
+      name: "Open budget",
       callback: () => void this.activateBudgetView()
     });
     this.registerObsidianProtocolHandler("finance-transaction", async (params) => {

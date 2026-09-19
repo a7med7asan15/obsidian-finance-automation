@@ -42,7 +42,7 @@ export class FilterStore {
     const next = current.includes(name)
       ? current.filter((item) => item !== name)
       : [...current, name];
-    this.set({ [key]: next } as Partial<Filter>);
+    this.set({ [key]: next });
   }
 
   toggleCategory(name: string): void {

@@ -164,11 +164,11 @@ export function validateRule(rule: unknown): string[] {
 
   conditions.forEach((condition, position) => {
     const where = `Condition ${position + 1}`;
-    if (!RULE_FIELDS.includes(condition?.field as RuleField)) {
+    if (!RULE_FIELDS.includes(condition?.field)) {
       errors.push(`${where} has an unknown field.`);
       return;
     }
-    if (!RULE_OPS.includes(condition?.op as RuleOp)) {
+    if (!RULE_OPS.includes(condition?.op)) {
       errors.push(`${where} has an unknown operator.`);
       return;
     }

@@ -1,4 +1,4 @@
-import type { CounterpartyRole, TransactionType } from "../data/types.ts";
+import type { CounterpartyRole } from "../data/types.ts";
 
 /**
  * Every transaction has another side to it, and what that side is called
@@ -17,7 +17,7 @@ export const ROLE_LABELS: Record<CounterpartyRole, string> = {
 };
 
 /** Money out meets a merchant or a recipient; money in comes from a sender. */
-export function roleForType(type: TransactionType | string): CounterpartyRole {
+export function roleForType(type: string): CounterpartyRole {
   if (type === "credit") return "sender";
   if (type === "transfer") return "recipient";
   // debit, fee, and a type the parser could not work out.

@@ -2,6 +2,7 @@ import type { App } from "obsidian";
 import { ensureFolder } from "../data/vault-json.ts";
 import { VAULT_ROOT } from "../constants.ts";
 import type { TransactionRecord } from "../data/types.ts";
+import { asText } from "../data/frontmatter.ts";
 
 const COLUMNS = [
   "date", "time", "amount", "currency", "type", "from_account", "to_account",
@@ -9,7 +10,7 @@ const COLUMNS = [
 ] as const;
 
 function cell(value: unknown): string {
-  const text = value === null || value === undefined ? "" : String(value);
+  const text = asText(value);
   return /[",\r\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
 }
 

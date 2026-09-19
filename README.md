@@ -169,7 +169,7 @@ That is enough. Send a bank message through the inbox and it becomes a transacti
 
 ### The Budget view
 
-Open it from the wallet icon in the ribbon, or **Open Budget** in the command palette.
+Open it from the wallet icon in the ribbon, or **Open budget** in the command palette.
 Five tabs share one set of filters.
 
 | Tab | What it gives you |
@@ -194,7 +194,7 @@ overridden by a rule.
 
 | Command | Does |
 |---|---|
-| **Open Budget** | Opens the Budget view |
+| **Open budget** | Opens the Budget view |
 | **Process pending SMS transactions** | Parses everything still `status: pending` |
 | **Import messages from the SMS inbox** | Pulls `Budget/Inbox` in right now |
 | **Add transaction** | Adds one by hand |

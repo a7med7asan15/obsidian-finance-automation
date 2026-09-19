@@ -150,7 +150,7 @@ export class AccountEditorModal extends Modal {
       .setName("Other names")
       .setDesc("Separated by commas. Wordings the bank uses for this account in its messages.")
       .addText((text) =>
-        text.setPlaceholder("cib, current account").setValue(this.draft.aliases)
+        text.setPlaceholder("bank, current account").setValue(this.draft.aliases)
           .onChange((value) => { this.draft.aliases = value; }),
       );
 
@@ -190,7 +190,7 @@ export class AccountEditorModal extends Modal {
 
     new Setting(contentEl)
       .setName("In use")
-      .setDesc("A closed account keeps its transactions but leaves the Accounts tab.")
+      .setDesc("A closed account keeps its transactions but leaves the accounts tab.")
       .addToggle((toggle) =>
         toggle.setValue(this.draft.active).onChange((value) => { this.draft.active = value; }),
       );

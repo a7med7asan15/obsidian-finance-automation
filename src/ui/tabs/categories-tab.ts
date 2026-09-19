@@ -14,6 +14,7 @@ import type FinanceAutomationPlugin from "../../main.ts";
 import type { CategoryTotal } from "../../domain/aggregate.ts";
 import type { CategoryRules } from "../../domain/categorize.ts";
 import type { CategoryRecord } from "../../data/types.ts";
+import { on } from "../events.ts";
 
 type SortKey = "total" | "count" | "name" | "recent";
 
@@ -288,7 +289,7 @@ export class CategoriesTab {
 
     if (!row.note) {
       const create = tools.createEl("button", { cls: "fin-chip", text: "Create its note" });
-      create.addEventListener("click", async () => {
+      on(create, "click", async () => {
         create.disabled = true;
         try {
           await this.plugin.createCategory(row.name);
@@ -372,7 +373,7 @@ export class CategoriesTab {
       });
       swatch.style.background = color;
       swatch.toggleClass("is-active", category.color === color);
-      swatch.addEventListener("click", async () => {
+      on(swatch, "click", async () => {
         try {
           await updateCategoryNote(this.plugin.app, category.path, { color });
           category.color = color;
@@ -409,7 +410,7 @@ export class CategoriesTab {
         text.inputEl.inputMode = "decimal";
         text.setPlaceholder("none");
         text.setValue(category.monthlyBudget === null ? "" : String(category.monthlyBudget));
-        text.inputEl.addEventListener("change", async () => {
+        on(text.inputEl, "change", async () => {
           const raw = text.inputEl.value.trim();
           const parsed = raw === "" ? null : Number(raw.replaceAll(",", ""));
           if (parsed !== null && !Number.isFinite(parsed)) {
@@ -444,9 +445,9 @@ export class CategoriesTab {
       .addTextArea((area) => {
         area.inputEl.addClass("fin-keyword-input");
         area.inputEl.rows = 2;
-        area.setPlaceholder("carrefour, seoudi");
+        area.setPlaceholder("supermarket, grocery");
         area.setValue((current?.keywords ?? []).join(", "));
-        area.inputEl.addEventListener("change", async () => {
+        on(area.inputEl, "change", async () => {
           const next = withKeywords(this.rules, category.name, area.inputEl.value.split(","));
           try {
             await saveCategoryRules(this.plugin.app, next);

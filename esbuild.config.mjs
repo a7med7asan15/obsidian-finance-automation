@@ -1,6 +1,6 @@
 import esbuild from "esbuild";
-import builtins from "builtin-modules";
 import { copyFile, mkdir, readFile } from "node:fs/promises";
+import { builtinModules } from "node:module";
 import { existsSync } from "node:fs";
 import path from "node:path";
 
@@ -58,7 +58,7 @@ const context = await esbuild.context({
   sourcemap: false,
   treeShaking: true,
   minify: false,
-  external: ["obsidian", "electron", ...builtins],
+  external: ["obsidian", "electron", ...builtinModules, ...builtinModules.map((m) => `node:${m}`)],
   // CI builds the release bundle only; there is no vault to copy into.
   plugins: process.env.CI ? [] : [copyToVault],
 });

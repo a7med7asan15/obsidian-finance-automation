@@ -2,6 +2,7 @@ import { extractByPatterns, hasKeyword } from "./patterns.ts";
 import { categorize, type CategoryRules } from "../categorize.ts";
 import { cleanCounterpartyName, counterpartyFields, roleForType } from "../counterparty.ts";
 import type { AccountRecord, TransactionType } from "../../data/types.ts";
+import { asText } from "../../data/frontmatter.ts";
 
 export type { CategoryRules };
 
@@ -111,7 +112,7 @@ export function mergeAccountSources(notes: AccountRecord[], config: AccountConfi
       });
       return;
     }
-    const entry = accounts[at]!;
+    const entry = accounts[at];
     if (!entry.currency && currency) entry.currency = currency;
     entry.card_endings = uniqueStrings([...(entry.card_endings ?? []), ...endings]);
     entry.aliases = uniqueStrings([...(entry.aliases ?? []), ...aliases]);
@@ -141,7 +142,7 @@ export function placeholderAccount(ending: string): string {
 
 /** Whether an account name is one of those stand-ins rather than a real account. */
 export function isPlaceholderAccount(value: unknown): boolean {
-  return /^Card ••••[0-9]+$/u.test(String(value ?? "").trim());
+  return /^Card ••••[0-9]+$/u.test(asText(value).trim());
 }
 
 export function accountCandidates(sms: string, ending: string, accounts: AccountConfig): string[] {

@@ -130,6 +130,9 @@ PLAN
   exit 0
 fi
 
+step "npm run lint"
+npm run lint
+
 step "npm test"
 npm test
 

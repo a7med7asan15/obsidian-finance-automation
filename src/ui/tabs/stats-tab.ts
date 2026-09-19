@@ -16,6 +16,7 @@ import { renderEmptyState } from "../components/empty-state.ts";
 import { exportCsv } from "../export-csv.ts";
 import type FinanceAutomationPlugin from "../../main.ts";
 import type { TransactionRecord } from "../../data/types.ts";
+import { on } from "../events.ts";
 
 const SHORT_MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
@@ -48,7 +49,7 @@ export class StatsTab {
 
     const actions = container.createDiv({ cls: "fin-stats-actions" });
     const exportButton = actions.createEl("button", { cls: "fin-more", text: "Export these transactions as CSV" });
-    exportButton.addEventListener("click", async () => {
+    on(exportButton, "click", async () => {
       try {
         const path = await exportCsv(this.plugin.app, records, periodLabel(filter.period));
         new Notice(`Exported ${records.length} transactions to ${path}.`);
