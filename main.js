@@ -1403,7 +1403,6 @@ async function saveRules(app, rules) {
 
 // src/data/create.ts
 var MONTHS2 = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-var KNOWN_PARAMS = /* @__PURE__ */ new Set(["action", "message", "sms", "text", "timestamp", "date"]);
 function yamlString(value) {
   return JSON.stringify(String(value ?? ""));
 }
@@ -1415,13 +1414,8 @@ function protocolValue(params, ...names) {
   return "";
 }
 function protocolMessage(params) {
-  let message = protocolValue(params, "message", "sms", "text");
+  const message = protocolValue(params, "message", "sms", "text");
   if (!message) return "";
-  for (const [key2, value] of Object.entries(params ?? {})) {
-    if (KNOWN_PARAMS.has(key2)) continue;
-    message += `&${key2}`;
-    if (value !== null && value !== void 0 && String(value) !== "") message += `=${value}`;
-  }
   return decodePercentEscapes(message);
 }
 var PERCENT_RUN = /(?:%[0-9A-Fa-f]{2})+/g;
@@ -4783,11 +4777,8 @@ var FinanceAutomationPlugin = class extends import_obsidian25.Plugin {
       name: "Open Budget",
       callback: () => void this.activateBudgetView()
     });
-    this.registerObsidianProtocolHandler("finance-sms", async (params) => {
-      await this.handleCaptureLink("sms", params);
-    });
     this.registerObsidianProtocolHandler("finance-transaction", async (params) => {
-      await this.handleCaptureLink("transaction", params);
+      await this.handleCaptureLink(params);
     });
     this.processIcon = this.addRibbonIcon("refresh-cw", "Process pending SMS transactions", () => {
       void this.runFinance(true);
@@ -4921,20 +4912,9 @@ var FinanceAutomationPlugin = class extends import_obsidian25.Plugin {
     const data = await this.loadData() ?? {};
     await this.saveData({ ...data, filter: this.store.serialize() });
   }
-  async handleCaptureLink(kind, params) {
+  async handleCaptureLink(params) {
     try {
-      let file;
-      if (kind === "sms") {
-        const patterns = await this.loadPatterns();
-        const message = protocolMessage(params);
-        if (message && !isTransactionMessage(message, patterns)) {
-          new import_obsidian25.Notice("Budget: ignored \u2014 that message is not about money moving.", 6e3);
-          return;
-        }
-        file = await createRawSmsTransaction(this.app, params, patterns);
-      } else {
-        file = await createStructuredTransaction(this.app, params);
-      }
+      const file = await createStructuredTransaction(this.app, params);
       new import_obsidian25.Notice(`Budget: captured ${file.path}.`, 5e3);
     } catch (error) {
       console.error("Ultra Budget Tracker: capture link failed", error);

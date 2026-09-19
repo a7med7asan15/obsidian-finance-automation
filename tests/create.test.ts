@@ -41,14 +41,9 @@ test("a second capture in the same second gets a suffix", async () => {
   assert.equal(duplicate.path, "Budget/Transactions/2026/Aug/29T14-35-02-2.md");
 });
 
-test("a message containing & round-trips whole", () => {
-  // Obsidian split "Paid 50 to A&B=C today" into three parameters.
-  assert.equal(
-    protocolMessage({ message: "Paid 50 to A", B: "C today" }),
-    "Paid 50 to A&B=C today",
-  );
-  assert.equal(protocolMessage({ message: "Ref 9", "x#tag": "" }), "Ref 9&x#tag");
+test("a plain message passes through untouched", () => {
   assert.equal(protocolMessage({ message: "Plain text" }), "Plain text");
+  assert.equal(protocolMessage({}), "");
 });
 
 test("a message that arrives still percent-encoded is decoded", () => {
@@ -70,16 +65,6 @@ test("decoding keeps the readable part when an escape is cut in half", () => {
 test("decoding leaves an already readable message alone", () => {
   assert.equal(decodePercentEscapes("Paid 50% at Cafe%20"), "Paid 50% at Cafe%20");
   assert.equal(decodePercentEscapes("تم خصم 350 جنيه"), "تم خصم 350 جنيه");
-});
-
-test("a captured message keeps its own & through to the note", async () => {
-  const app = fakeApp();
-  const file = await createRawSmsTransaction(app, {
-    message: "Purchase at Mario",
-    " Luigi": "EGP 50",
-    timestamp: "2026-08-29T14:35:02+03:00",
-  });
-  assert.match(app.vault.files.get(file.path)!, /sms_message: "Purchase at Mario& Luigi=EGP 50"/);
 });
 
 test("a message carrying its own date is filed under that date, not now", async () => {

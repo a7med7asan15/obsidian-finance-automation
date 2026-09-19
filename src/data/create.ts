@@ -12,9 +12,6 @@ const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "
 /** The parameters Obsidian hands a protocol handler. */
 export type ProtocolParams = Record<string, string>;
 
-/** Keys the capture links define; everything else is message text split on `&`. */
-const KNOWN_PARAMS = new Set(["action", "message", "sms", "text", "timestamp", "date"]);
-
 function yamlString(value: unknown): string {
   return JSON.stringify(String(value ?? ""));
 }
@@ -28,19 +25,16 @@ export function protocolValue(params: ProtocolParams, ...names: string[]): strin
 }
 
 /**
- * Obsidian splits the query string on `&`, so an SMS that reaches the handler
- * unencoded with a literal `&` in it arrives truncated, its tail spread across
- * stray parameter keys. Gluing the extras back on in the order received keeps
- * such a message whole; the Shortcut should still encode it.
+ * The message a capture carries, decoded.
+ *
+ * The inbox is the only caller now that the `finance-sms` link is gone, so a
+ * message arrives whole in one field and needs no reassembly — it was read from
+ * a file, not from a URL query. Decoding still matters: a Shortcut can spool a
+ * message in its percent spelling.
  */
 export function protocolMessage(params: ProtocolParams): string {
-  let message = protocolValue(params, "message", "sms", "text");
+  const message = protocolValue(params, "message", "sms", "text");
   if (!message) return "";
-  for (const [key, value] of Object.entries(params ?? {})) {
-    if (KNOWN_PARAMS.has(key)) continue;
-    message += `&${key}`;
-    if (value !== null && value !== undefined && String(value) !== "") message += `=${value}`;
-  }
   return decodePercentEscapes(message);
 }
 

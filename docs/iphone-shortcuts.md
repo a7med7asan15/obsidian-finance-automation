@@ -1,25 +1,24 @@
 # iPhone Shortcuts
 
-Three ways in, one for each situation:
+Two ways in, one for each situation:
 
 | Way | How it travels | You provide |
 |---|---|---|
-| **Inbox** — automatic, recommended for bank messages | a file in `Budget/Inbox` | nothing but the message text |
-| **SMS link** — automatic, for short messages only | `obsidian://finance-sms` | nothing but the message text |
+| **Inbox** — automatic, for bank messages | a file in `Budget/Inbox` | nothing but the message text |
 | **Manual** — you tap it, for cash and anything with no SMS | `obsidian://finance-transaction` | the details, through prompts and dropdowns |
 
-**Start with the inbox for bank SMS.** A link carries the message inside a URL, and that
-has two ceilings nothing downstream can work around: iOS drops the link entirely when it
-is the thing that launches Obsidian, and a long encoded message stops arriving at all. The
-inbox has neither problem — see [The inbox way](#0-the-inbox-way-recommended) — and is the
-only capture that cannot be lost while the app is closed.
+**Every bank message goes through the inbox.** There was once an `obsidian://finance-sms`
+link as well; it is gone, because carrying a message inside a URL has two ceilings nothing
+downstream can work around — iOS drops the link entirely when it is the thing that launches
+Obsidian, and a long encoded message stops arriving at all. The inbox has neither problem
+and is the only capture that cannot be lost while the app is closed.
 
-Enable Ultra Budget Tracker and restart Obsidian once before using either link, so the URL
-handlers are registered.
+Enable Ultra Budget Tracker and restart Obsidian once before using the manual link, so its
+URL handler is registered.
 
 ---
 
-## 0. The inbox way (recommended)
+## 1. The inbox, for bank messages
 
 The automation saves the message as a file inside the vault. Nothing opens, nothing has to
 be running, and there is no length limit — a file is a file. Obsidian turns every waiting
@@ -47,7 +46,7 @@ first run. Any `.txt`, `.md`, `.text` or `.log` file in it is treated as one mes
 Obsidian reads the inbox on startup — even with **Run on startup** turned off, because
 capturing a message is not the same as processing one — and on every processing pass. Each
 file becomes a note with `status: pending` and the message in `sms_message` and the
-**Original SMS** block, then the parser fills in the rest exactly as it does for a link.
+**Original SMS** block, then the parser fills in the rest from the message text.
 The file is deleted only after its note is on disk, so a capture is never consumed without
 a note to show for it. An empty file is left alone, and a file whose note could not be
 written stays put for the next pass.
@@ -67,42 +66,9 @@ palette.
 
 ---
 
-## 1. The SMS way
+## 2. How a message is read
 
-The automation sends **only the message content**, URL-encoded. No sender, no date, no
-other field. Everything else is read out of the message text inside Obsidian.
-
-```text
-obsidian://finance-sms?message=⟨the URL-encoded message⟩
-```
-
-The angle brackets stand for a Shortcuts variable chip and are never typed. Nor is any
-bracket of any kind: `[` and `]` belong to IPv6 hosts in a URL, and a link carrying them
-is malformed. One in the query is enough to lose the rest of the message.
-
-### Build it — three actions
-
-1. Open **Shortcuts → Automation → +** and choose **Message**.
-2. Tap **Sender** and pick the bank's sender name or number. This is only the trigger
-   condition — iOS needs one, and nothing about the sender is sent to Obsidian.
-3. Choose **Run Immediately**, tap **Next**, then **New Blank Automation**.
-4. Add **URL Encode** with **Shortcut Input** as its input — or **Content**, if the
-   automation offers that instead.
-5. Add **Text** and type the link, ending it at `message=`. Then insert the **URL Encoded
-   Text** variable so the chip sits directly against the `=`, with nothing — no bracket,
-   no space — between them:
-
-   ```text
-   obsidian://finance-sms?message=⟨URL Encoded Text⟩
-   ```
-6. Add **Open URLs** with that **Text** as its input.
-7. Tap **Done**.
-
-That is the whole automation. Nothing else belongs in it.
-
-The **URL Encode** step is not optional. A raw space ends a link where it sits, so
-`تم خصم 250 جنيه` opens as `obsidian://finance-sms?message=تم` and the note is created
-with one word in it.
+Whatever the inbox captures is parsed in the vault, from the message text alone.
 
 ### What Obsidian reads out of the message
 
@@ -120,7 +86,7 @@ fills in the rest from the text alone, using
 | which side of a transfer your account is on | the `debit` and `credit` keywords — `من حسابك` is money out, `إلى حسابك` money in |
 | `merchant`, `recipient` or `sender` | `merchant_patterns`, `recipient_patterns`, `sender_patterns` — whichever the type calls for, plus the built-in patterns |
 | `category` | the keyword rules in `Budget/Settings/Categories/` |
-| `timestamp` | the date in the message when it carries one, otherwise the moment the link opened |
+| `timestamp` | the date in the message when it carries one, otherwise the moment it was captured |
 
 The account number is the hinge: list every digit group a bank uses for an account under
 `card_endings` on its note in `Budget/Accounts/` and each message from that card files
@@ -192,28 +158,16 @@ next one on its own.
 
 ### What arrives, and what the note shows
 
-The note shows the message as the bank wrote it. When a link hands the plugin text that
-is still in its encoded spelling — `%D8%AA%D9%85` rather than `تم` — the plugin decodes it
-before writing, so `sms_message` and the **Original SMS** block hold the original either
-way.
+The note shows the message as the bank wrote it. When a Shortcut spools text that is still
+in its encoded spelling — `%D8%AA%D9%85` rather than `تم` — the plugin decodes it before
+writing, so `sms_message` and the **Original SMS** block hold the original either way.
 
-Two older hazards are handled too. A literal `&` or `#` in an unencoded message ends the
-`message` parameter early; the plugin glues the stray parameters Obsidian splits off back
-on in the order received. And a link cut off mid-escape leaves text that cannot be
-decoded; the plugin decodes as far as the cut and keeps the remainder as it came, rather
-than losing the whole message.
-
-### The length of a link
-
-A message travels inside the URL, and encoding is expensive: one Arabic letter costs six
-characters. A long bank SMS can run to several hundred characters encoded, and a link that
-is cut short arrives short — nothing downstream can recover text that was never sent. If
-notes are arriving truncated at the same length every time, that ceiling is what you are
-hitting.
+Text that cannot be fully decoded is handled too: the plugin decodes as far as it can and
+keeps the remainder as it came, rather than losing the whole message.
 
 ---
 
-## 2. The manual way
+## 3. The manual way
 
 A Shortcut you run yourself — from the Shortcuts app, a Home Screen icon, or a widget —
 when there is no SMS to work from. It asks for the details and sends them already
@@ -276,21 +230,19 @@ safe as long as you write their spaces as `%20`.
 
 | Symptom | Cause |
 |---|---|
-| **Black screen and no note, only from the Shortcut** | The link is too long, or it is the thing launching Obsidian. Obsidian never reads the URL iOS launched it with, and a long encoded message stops arriving. Use the inbox. |
-| Nothing happens when the link opens | Plugin not enabled, or Obsidian not restarted since installing it |
+| Nothing happens when the manual link opens | Plugin not enabled, or Obsidian not restarted since installing it |
 | Inbox file never becomes a note | The file has an extension other than `.txt`, `.md`, `.text` or `.log`, or Save File wrote it outside `Budget/Inbox` |
 | Inbox file vanished and no note appeared | The message named no money moving, so it was discarded — the notice counts these. If it was a real transaction, add its wording to `transaction_keywords` |
 | Note appears but stays `pending` | Processing has not run yet; run **Process pending SMS transactions** |
 | Stays `pending` with no account | The card digits are missing from `card_endings`, or the bank's wording is not in `card_ending_patterns` |
-| SMS note holds only the first word | The automation has no **URL Encode** action, so a space ended the link |
-| SMS text cut off at the same length every time | The link is running into a length ceiling — see above |
 | Manual note has a mangled account | A space in a dropdown value was not written as `%20` |
-| Message starts with `[` or is cut off after it | A bracket was typed around a variable chip; the link is malformed |
+| Manual note is cut off, or starts with `[` | A bracket was typed around a variable chip in the manual link; it is malformed |
 
-If the phone holds more than one vault, open the finance vault once: the link is handled
-by the vault Obsidian has open.
+If the phone holds more than one vault, open the finance vault once: the manual link is
+handled by the vault Obsidian has open.
 
 ## Privacy
 
-The links open the installed Obsidian app. Ultra Budget Tracker writes and parses the
-transaction inside the vault and makes no network requests.
+The inbox never leaves the vault, and the manual link only opens the installed Obsidian
+app. Ultra Budget Tracker writes and parses every transaction inside the vault and makes
+no network requests.

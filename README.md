@@ -25,8 +25,8 @@ diffable, syncable, and yours after the plugin is gone.
 
 ## What it does
 
-- **Captures** a bank SMS from an iPhone automation — as a file dropped in `Budget/Inbox`,
-  or through an `obsidian://` link — and derives every field from the message text.
+- **Captures** a bank SMS from an iPhone automation as a file dropped in `Budget/Inbox`,
+  and derives every field from the message text.
 - **Filters** out what is not a transaction. A statement reminder, a due date, a one-time
   code or an offer carries an amount and a card number too; only a message that says money
   actually moved becomes a note.
@@ -53,7 +53,7 @@ requests, no telemetry.
 1. **Settings → Community plugins → Browse**.
 2. Search for **Ultra Budget Tracker**.
 3. **Install**, then **Enable**.
-4. Restart Obsidian once, so the `obsidian://` capture links register.
+4. Restart Obsidian once, so the `obsidian://` capture link registers.
 
 ### Manually
 
@@ -369,18 +369,19 @@ transaction notes, apply exclusion rules automatically, and a shortcut to the ru
 
 ## iPhone Shortcuts
 
-Three ways in. **Use the inbox for bank messages** — it is the only one that cannot be lost
-while Obsidian is closed, and the only one with no length limit.
+Two ways in, and they do not overlap.
 
 | Way | Travels as | You supply |
 |---|---|---|
-| **Inbox** — automatic, recommended | a file in `Budget/Inbox` | nothing but the message |
-| **SMS link** — automatic, short messages only | `obsidian://finance-sms` | nothing but the message |
-| **Manual** — you tap it | `obsidian://finance-transaction` | the fields, via prompts |
+| **Inbox** — automatic, for bank messages | a file in `Budget/Inbox` | nothing but the message |
+| **Manual** — you tap it, for cash and anything with no SMS | `obsidian://finance-transaction` | the fields, via prompts |
 
-Enable the plugin and restart Obsidian once before using either link, so the handlers register.
+Every bank message goes through the inbox. A file has no length ceiling and it survives the
+app being closed, which a link does not: iOS drops a link outright when the link is what
+launches Obsidian, and a long encoded message stops arriving at all. Enable the plugin and
+restart Obsidian once before using the manual link, so the handler registers.
 
-### 1. The inbox (recommended) — four actions
+### 1. The inbox, for bank messages — four actions
 
 1. **Shortcuts → Automation → +** → **Message**.
 2. Tap **Sender**, pick your bank's sender name or number, then **Run Immediately → Next →
@@ -401,37 +402,16 @@ a capture is never consumed without a note to show for it. A message that is not
 moving is discarded and counted in the notice; forward the whole bank thread if that is
 easier, and only the transactions will land.
 
-### 2. The SMS link — for short messages
-
-```text
-obsidian://finance-sms?message=⟨URL Encoded Text⟩
-```
-
-1. **Shortcuts → Automation → +** → **Message**, pick the sender, **Run Immediately → Next
-   → New Blank Automation**.
-2. Add **URL Encode** with **Shortcut Input** as its input.
-3. Add **Text** holding `obsidian://finance-sms?message=` and insert the **URL Encoded
-   Text** variable so the chip sits **directly against the `=`** — no space, no bracket.
-4. Add **Open URLs** with that **Text** as its input.
-5. **Done**.
-
-The **URL Encode** step is not optional: a raw space ends the link where it sits. Never type
-`[` or `]` — they belong to IPv6 hosts in a URL and one in the query loses the rest of the
-message.
-
-Two ceilings are unavoidable here, which is why the inbox is preferred: iOS drops the link
-entirely when it is the thing that launches Obsidian, and a long encoded message stops
-arriving at all.
-
-### 3. Manual — for cash and anything with no SMS
+### 2. Manual, for cash and anything with no SMS
 
 ```text
 obsidian://finance-transaction?amount=120.50&currency=EGP&account=Cash&type=debit
 ```
 
-Build it as a normal Shortcut (not an automation): **Ask for Input** for the amount, **Choose
-from Menu** for the account and the type, then **Text** and **Open URLs** as above. Add it to
-the Home Screen and it is one tap.
+Build it as a normal Shortcut, not an automation: **Ask for Input** for the amount, **Choose
+from Menu** for the account and the type, then a **Text** action holding the link with those
+variables dropped into it, and **Open URLs** with that text as its input. Add it to the Home
+Screen and it is one tap.
 
 Parameters: `amount`, `currency`, `account`, `type` (`debit`, `credit`, `transfer`, `fee`),
 and optionally `merchant` (or `recipient` / `sender`), `category`, `date`, and `from` / `to`

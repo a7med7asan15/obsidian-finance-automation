@@ -1,4 +1,4 @@
-import { Notice, Plugin, TFile } from "obsidian";
+import { Notice, Plugin } from "obsidian";
 import {
   ACCOUNTS_JSON_PATH,
   CATEGORY_RULES_PATH,
@@ -9,7 +9,7 @@ import {
 import { registerFinanceCodeBlock } from "./codeblock.ts";
 import { TransactionIndex } from "./data/index-store.ts";
 import { createCategoryNote } from "./data/categories.ts";
-import { createRawSmsTransaction, createStructuredTransaction, protocolMessage } from "./data/create.ts";
+import { createStructuredTransaction } from "./data/create.ts";
 import type { ProtocolParams } from "./data/create.ts";
 import { describeInbox, ingestInbox } from "./data/inbox.ts";
 import { isTransactionPath, parserChanges } from "./data/records.ts";
@@ -23,7 +23,6 @@ import { isPlaceholderAccount, mergeAccountSources, parseSms } from "./domain/pa
 import { counterpartyFields, readCounterparty } from "./domain/counterparty.ts";
 import { sameName } from "./domain/names.ts";
 import { withDefaultPatterns } from "./domain/parser/defaults.ts";
-import { isTransactionMessage } from "./domain/parser/relevance.ts";
 import type { AccountConfig, CategoryRules, SmsPatterns } from "./domain/parser/sms.ts";
 import { DEFAULT_SETTINGS, FinanceAutomationSettingTab } from "./settings.ts";
 import { FilterStore } from "./store/filter-store.ts";
@@ -74,11 +73,12 @@ export default class FinanceAutomationPlugin extends Plugin {
       callback: () => void this.activateBudgetView(),
     });
 
-    this.registerObsidianProtocolHandler("finance-sms", async (params) => {
-      await this.handleCaptureLink("sms", params as ProtocolParams);
-    });
+    // Bank messages come in through Budget/Inbox instead of a link: a file has
+    // no length ceiling, and it survives the app being closed. This link covers
+    // the other case only — the tap-to-fill Shortcut for cash and anything with
+    // no SMS behind it.
     this.registerObsidianProtocolHandler("finance-transaction", async (params) => {
-      await this.handleCaptureLink("transaction", params as ProtocolParams);
+      await this.handleCaptureLink(params as ProtocolParams);
     });
 
     this.processIcon = this.addRibbonIcon("refresh-cw", "Process pending SMS transactions", () => {
@@ -252,24 +252,11 @@ export default class FinanceAutomationPlugin extends Plugin {
     await this.saveData({ ...data, filter: this.store.serialize() });
   }
 
-  private async handleCaptureLink(kind: "sms" | "transaction", params: ProtocolParams): Promise<void> {
+  private async handleCaptureLink(params: ProtocolParams): Promise<void> {
     try {
-      let file: TFile;
-      if (kind === "sms") {
-        // The same gate the inbox uses, at the other door: a link carrying a
-        // statement reminder or a one-time code leaves no note behind. A link
-        // is one deliberate message rather than a swept folder, so it says so
-        // instead of disappearing quietly.
-        const patterns = await this.loadPatterns();
-        const message = protocolMessage(params);
-        if (message && !isTransactionMessage(message, patterns)) {
-          new Notice("Budget: ignored — that message is not about money moving.", 6000);
-          return;
-        }
-        file = await createRawSmsTransaction(this.app, params, patterns);
-      } else {
-        file = await createStructuredTransaction(this.app, params);
-      }
+      // No relevance gate here: the link carries fields a person filled in
+      // deliberately, not a swept bank thread, so there is nothing to sift.
+      const file = await createStructuredTransaction(this.app, params);
       new Notice(`Budget: captured ${file.path}.`, 5000);
     } catch (error) {
       console.error("Ultra Budget Tracker: capture link failed", error);
