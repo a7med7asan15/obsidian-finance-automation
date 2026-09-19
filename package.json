@@ -1,6 +1,6 @@
 {
-  "name": "obsidian-finance-automation",
-  "version": "3.3.0",
+  "name": "ultra-budget-tracker",
+  "version": "1.0.0",
   "private": true,
   "scripts": {
     "build": "tsc --noEmit && node esbuild.config.mjs",

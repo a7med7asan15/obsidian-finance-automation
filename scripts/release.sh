@@ -1,16 +1,17 @@
 #!/usr/bin/env bash
 #
-# Cut a release BRAT can see.
+# Cut a release Obsidian can install.
 #
-# BRAT compares the installed manifest.json version against the newest GitHub
-# release tag, so an update only reaches the iPhone once a tag exists, the tag
-# matches manifest.json, and the release carries main.js, manifest.json and
-# styles.css as individual assets. This script owns the first half — the version
-# files, the release commit and the tag — and pushing the tag hands the second
-# half to .github/workflows/release.yml, which builds and publishes the assets.
+# Obsidian's community plugin updater reads manifest.json from the newest GitHub
+# release, so an update only reaches a user once a tag exists, the tag matches
+# manifest.json exactly (no "v" prefix), and the release carries main.js,
+# manifest.json and styles.css as individual assets. This script owns the first
+# half — the version files, the release commit and the tag — and pushing the tag
+# hands the second half to .github/workflows/release.yml, which builds and
+# publishes the assets.
 #
 #   scripts/release.sh patch "stops a needs_review note rewriting itself"
-#   scripts/release.sh 3.2.0 "edits accounts and categories in place"
+#   scripts/release.sh 1.1.0 "edits accounts and categories in place"
 #   scripts/release.sh minor --dry-run
 #
 set -euo pipefail
@@ -79,8 +80,8 @@ case "$target" in
 esac
 
 # The workflow only fires on tags shaped X.Y.Z, and a version that does not move
-# forward leaves BRAT showing no update at all, so both are worth catching here
-# rather than after a push.
+# forward leaves every client showing no update at all, so both are worth
+# catching here rather than after a push.
 node -e '
   const [cur, next] = process.argv.slice(1);
   const cmp = (a, b) => {
@@ -135,7 +136,7 @@ npm test
 step "npm run build"
 npm run build
 
-# manifest.json is what BRAT reads to decide an update is available; versions.json
+# manifest.json is what Obsidian reads to decide an update is available; versions.json
 # maps each release to the Obsidian it needs; package.json is kept in step so the
 # three never disagree about what the current version is.
 write_versions() {
@@ -182,6 +183,6 @@ fi
 
 cat <<'DONE'
 Once the run is green the release carries main.js, manifest.json and styles.css as
-separate assets, which is what BRAT downloads. BRAT offers the update on its next
-check — "BRAT: Check for updates to all beta plugins" — or on the next Obsidian start.
+separate assets, which is what Obsidian downloads. It offers the update under
+Settings -> Community plugins -> Check for updates, or on the next Obsidian start.
 DONE

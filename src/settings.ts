@@ -26,8 +26,9 @@ export class FinanceAutomationSettingTab extends PluginSettingTab {
   override display(): void {
     const { containerEl } = this;
     containerEl.empty();
-    containerEl.createEl("h2", { text: "Finance automation" });
 
+    // Obsidian already renders the plugin name above this pane, so a heading of
+    // our own would only repeat it; the review guidelines ask for none.
     containerEl.createEl("p", {
       text: "The same local engine runs on desktop and mobile, parsing pending notes and keeping the Budget view up to date.",
     });

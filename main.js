@@ -2137,7 +2137,6 @@ var FinanceAutomationSettingTab = class extends import_obsidian9.PluginSettingTa
   display() {
     const { containerEl } = this;
     containerEl.empty();
-    containerEl.createEl("h2", { text: "Finance automation" });
     containerEl.createEl("p", {
       text: "The same local engine runs on desktop and mobile, parsing pending notes and keeping the Budget view up to date."
     });
@@ -4805,7 +4804,7 @@ var FinanceAutomationPlugin = class extends import_obsidian25.Plugin {
       callback: async () => {
         const captured = await this.captureInbox();
         if (captured) void this.runFinance(false);
-        else new import_obsidian25.Notice(`Finance: no messages waiting in ${INBOX_DIR}.`);
+        else new import_obsidian25.Notice(`Budget: no messages waiting in ${INBOX_DIR}.`);
       }
     });
     this.addCommand({
@@ -4827,7 +4826,7 @@ var FinanceAutomationPlugin = class extends import_obsidian25.Plugin {
       name: "Fill in missing merchants from stored messages",
       callback: async () => {
         const updated = await this.fillMissingCounterparties();
-        new import_obsidian25.Notice(`Finance: named the other side of ${updated} transaction(s).`, 6e3);
+        new import_obsidian25.Notice(`Budget: named the other side of ${updated} transaction(s).`, 6e3);
       }
     });
     this.addCommand({
@@ -4850,7 +4849,7 @@ var FinanceAutomationPlugin = class extends import_obsidian25.Plugin {
       name: "Apply exclusion rules to all transactions",
       callback: async () => {
         const updated = await this.applyRulesToAll();
-        new import_obsidian25.Notice(`Finance: updated ${updated} transaction(s).`);
+        new import_obsidian25.Notice(`Budget: updated ${updated} transaction(s).`);
       }
     });
     this.addSettingTab(new FinanceAutomationSettingTab(this.app, this));
@@ -4929,17 +4928,17 @@ var FinanceAutomationPlugin = class extends import_obsidian25.Plugin {
         const patterns = await this.loadPatterns();
         const message = protocolMessage(params);
         if (message && !isTransactionMessage(message, patterns)) {
-          new import_obsidian25.Notice("Finance: ignored \u2014 that message is not about money moving.", 6e3);
+          new import_obsidian25.Notice("Budget: ignored \u2014 that message is not about money moving.", 6e3);
           return;
         }
         file = await createRawSmsTransaction(this.app, params, patterns);
       } else {
         file = await createStructuredTransaction(this.app, params);
       }
-      new import_obsidian25.Notice(`Finance: captured ${file.path}.`, 5e3);
+      new import_obsidian25.Notice(`Budget: captured ${file.path}.`, 5e3);
     } catch (error) {
-      console.error("Finance capture link failed", error);
-      new import_obsidian25.Notice(`Finance capture failed: ${error.message}`, 1e4);
+      console.error("Ultra Budget Tracker: capture link failed", error);
+      new import_obsidian25.Notice(`Budget capture failed: ${error.message}`, 1e4);
     }
   }
   /**
@@ -4952,10 +4951,10 @@ var FinanceAutomationPlugin = class extends import_obsidian25.Plugin {
   async captureInbox() {
     const inbox = await ingestInbox(this.app, await this.loadPatterns());
     for (const failure of inbox.failed) {
-      console.error("Finance inbox capture failed", failure.path, failure.error);
+      console.error("Ultra Budget Tracker: inbox capture failed", failure.path, failure.error);
     }
     const summary = describeInbox(inbox);
-    if (summary) new import_obsidian25.Notice(`Finance: ${summary}.`, 6e3);
+    if (summary) new import_obsidian25.Notice(`Budget: ${summary}.`, 6e3);
     for (const path of inbox.created) this.index.refreshPath(path);
     return inbox.created.length;
   }
@@ -4979,7 +4978,7 @@ var FinanceAutomationPlugin = class extends import_obsidian25.Plugin {
     }, 750);
   }
   setStatus(value) {
-    this.status?.setText(`Finance: ${value}`);
+    this.status?.setText(`Budget: ${value}`);
     if (this.processIcon) {
       this.processIcon.toggleClass("is-processing", value === "running\u2026");
       this.processIcon.setAttribute("aria-busy", value === "running\u2026" ? "true" : "false");
@@ -4988,21 +4987,21 @@ var FinanceAutomationPlugin = class extends import_obsidian25.Plugin {
   async runFinance(showNotice) {
     if (this.running) {
       this.queued = true;
-      if (showNotice) new import_obsidian25.Notice("Finance processing is already running; another pass is queued.");
+      if (showNotice) new import_obsidian25.Notice("Budget processing is already running; another pass is queued.");
       return;
     }
     this.running = true;
     this.setStatus("running\u2026");
-    if (showNotice) new import_obsidian25.Notice("Finance: processing\u2026");
+    if (showNotice) new import_obsidian25.Notice("Budget: processing\u2026");
     try {
       if (await this.captureInbox()) this.queued = true;
       const updated = await this.processPending();
       this.setStatus("ready");
-      if (showNotice) new import_obsidian25.Notice(`Finance: updated ${updated} transaction(s).`, 6e3);
+      if (showNotice) new import_obsidian25.Notice(`Budget: updated ${updated} transaction(s).`, 6e3);
     } catch (error) {
       this.setStatus("error");
-      console.error("Finance automation failed", error);
-      new import_obsidian25.Notice(`Finance automation failed: ${error.message}`, 1e4);
+      console.error("Ultra Budget Tracker: processing failed", error);
+      new import_obsidian25.Notice(`Budget processing failed: ${error.message}`, 1e4);
     } finally {
       this.running = false;
       if (this.queued) {

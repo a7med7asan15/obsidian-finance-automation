@@ -37,7 +37,7 @@ const copyToVault = {
         console.log(`skipped install: ${vaultRoot} is not an Obsidian vault`);
         return;
       }
-      const installDir = path.join(vaultRoot, ".obsidian", "plugins", "finance-automation");
+      const installDir = path.join(vaultRoot, ".obsidian", "plugins", "ultra-budget-tracker");
       await mkdir(installDir, { recursive: true });
       for (const file of ["main.js", "manifest.json", "styles.css"]) {
         await copyFile(path.join(process.cwd(), file), path.join(installDir, file));

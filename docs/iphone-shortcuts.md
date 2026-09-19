@@ -14,7 +14,7 @@ is the thing that launches Obsidian, and a long encoded message stops arriving a
 inbox has neither problem — see [The inbox way](#0-the-inbox-way-recommended) — and is the
 only capture that cannot be lost while the app is closed.
 
-Enable Finance Automation and restart Obsidian once before using either link, so the URL
+Enable Ultra Budget Tracker and restart Obsidian once before using either link, so the URL
 handlers are registered.
 
 ---
@@ -292,5 +292,5 @@ by the vault Obsidian has open.
 
 ## Privacy
 
-The links open the installed Obsidian app. Finance Automation writes and parses the
+The links open the installed Obsidian app. Ultra Budget Tracker writes and parses the
 transaction inside the vault and makes no network requests.

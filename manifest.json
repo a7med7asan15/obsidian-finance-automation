@@ -1,10 +1,11 @@
 {
-  "id": "finance-automation",
-  "name": "Finance Automation",
-  "version": "3.3.0",
+  "id": "ultra-budget-tracker",
+  "name": "Ultra Budget Tracker",
+  "version": "1.0.0",
   "minAppVersion": "1.7.0",
-  "description": "Process finance SMS notes and generate reports with one cross-platform engine for mobile and desktop.",
+  "description": "Turn bank SMS messages into structured transaction notes, then track spending, budgets, merchants and account balances in a built-in budget view. Runs entirely offline on desktop and mobile.",
   "author": "Ahmed Hassan",
   "authorUrl": "https://github.com/a7med7asan15",
+  "fundingUrl": "https://buymeacoffee.com/a7med7asan15",
   "isDesktopOnly": false
 }

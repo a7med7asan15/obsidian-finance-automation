@@ -98,7 +98,7 @@ export default class FinanceAutomationPlugin extends Plugin {
       callback: async () => {
         const captured = await this.captureInbox();
         if (captured) void this.runFinance(false);
-        else new Notice(`Finance: no messages waiting in ${INBOX_DIR}.`);
+        else new Notice(`Budget: no messages waiting in ${INBOX_DIR}.`);
       },
     });
 
@@ -123,7 +123,7 @@ export default class FinanceAutomationPlugin extends Plugin {
       name: "Fill in missing merchants from stored messages",
       callback: async () => {
         const updated = await this.fillMissingCounterparties();
-        new Notice(`Finance: named the other side of ${updated} transaction(s).`, 6000);
+        new Notice(`Budget: named the other side of ${updated} transaction(s).`, 6000);
       },
     });
 
@@ -150,7 +150,7 @@ export default class FinanceAutomationPlugin extends Plugin {
       name: "Apply exclusion rules to all transactions",
       callback: async () => {
         const updated = await this.applyRulesToAll();
-        new Notice(`Finance: updated ${updated} transaction(s).`);
+        new Notice(`Budget: updated ${updated} transaction(s).`);
       },
     });
 
@@ -263,17 +263,17 @@ export default class FinanceAutomationPlugin extends Plugin {
         const patterns = await this.loadPatterns();
         const message = protocolMessage(params);
         if (message && !isTransactionMessage(message, patterns)) {
-          new Notice("Finance: ignored — that message is not about money moving.", 6000);
+          new Notice("Budget: ignored — that message is not about money moving.", 6000);
           return;
         }
         file = await createRawSmsTransaction(this.app, params, patterns);
       } else {
         file = await createStructuredTransaction(this.app, params);
       }
-      new Notice(`Finance: captured ${file.path}.`, 5000);
+      new Notice(`Budget: captured ${file.path}.`, 5000);
     } catch (error) {
-      console.error("Finance capture link failed", error);
-      new Notice(`Finance capture failed: ${(error as Error).message}`, 10000);
+      console.error("Ultra Budget Tracker: capture link failed", error);
+      new Notice(`Budget capture failed: ${(error as Error).message}`, 10000);
     }
   }
 
@@ -287,10 +287,10 @@ export default class FinanceAutomationPlugin extends Plugin {
   private async captureInbox(): Promise<number> {
     const inbox = await ingestInbox(this.app, await this.loadPatterns());
     for (const failure of inbox.failed) {
-      console.error("Finance inbox capture failed", failure.path, failure.error);
+      console.error("Ultra Budget Tracker: inbox capture failed", failure.path, failure.error);
     }
     const summary = describeInbox(inbox);
-    if (summary) new Notice(`Finance: ${summary}.`, 6000);
+    if (summary) new Notice(`Budget: ${summary}.`, 6000);
     for (const path of inbox.created) this.index.refreshPath(path);
     return inbox.created.length;
   }
@@ -317,7 +317,7 @@ export default class FinanceAutomationPlugin extends Plugin {
   }
 
   private setStatus(value: string): void {
-    this.status?.setText(`Finance: ${value}`);
+    this.status?.setText(`Budget: ${value}`);
     if (this.processIcon) {
       this.processIcon.toggleClass("is-processing", value === "running…");
       this.processIcon.setAttribute("aria-busy", value === "running…" ? "true" : "false");
@@ -327,24 +327,24 @@ export default class FinanceAutomationPlugin extends Plugin {
   async runFinance(showNotice: boolean): Promise<void> {
     if (this.running) {
       this.queued = true;
-      if (showNotice) new Notice("Finance processing is already running; another pass is queued.");
+      if (showNotice) new Notice("Budget processing is already running; another pass is queued.");
       return;
     }
 
     this.running = true;
     this.setStatus("running…");
-    if (showNotice) new Notice("Finance: processing…");
+    if (showNotice) new Notice("Budget: processing…");
     try {
       // Whatever the inbox holds becomes a note before the parsing pass, so a
       // capture and its parse land in the same run.
       if (await this.captureInbox()) this.queued = true;
       const updated = await this.processPending();
       this.setStatus("ready");
-      if (showNotice) new Notice(`Finance: updated ${updated} transaction(s).`, 6000);
+      if (showNotice) new Notice(`Budget: updated ${updated} transaction(s).`, 6000);
     } catch (error) {
       this.setStatus("error");
-      console.error("Finance automation failed", error);
-      new Notice(`Finance automation failed: ${(error as Error).message}`, 10000);
+      console.error("Ultra Budget Tracker: processing failed", error);
+      new Notice(`Budget processing failed: ${(error as Error).message}`, 10000);
     } finally {
       this.running = false;
       if (this.queued) {
