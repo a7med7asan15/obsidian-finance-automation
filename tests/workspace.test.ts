@@ -5,7 +5,7 @@ import { stubObsidian } from "./helpers/obsidian-stub.ts";
 stubObsidian();
 
 const { fakeApp } = await import("./helpers/fake-app.ts");
-const { ensureWorkspace, describeWorkspace } = await import("../src/data/workspace.ts");
+const { ensureWorkspace, describeWorkspace, planWorkspace } = await import("../src/data/workspace.ts");
 const { ingestInbox } = await import("../src/data/inbox.ts");
 const { loadVaultJson, saveVaultJson } = await import("../src/data/vault-json.ts");
 const { DEFAULT_CATEGORIES } = await import("../src/data/settings-files.ts");
@@ -160,4 +160,46 @@ test("the README it writes is never ingested as a message", async () => {
 
   assert.deepEqual(result, { created: [], empty: [], ignored: [], failed: [] });
   assert.ok(app.vault.files.has("Budget/Inbox/README.md"));
+});
+
+test("the plan of a fresh vault has everything to make and nothing to lose", async () => {
+  const app = fakeApp();
+
+  const plan = await planWorkspace(app);
+
+  assert.deepEqual(plan.reset, []);
+  assert.deepEqual(plan.folders, [
+    "Budget",
+    "Budget/Inbox",
+    "Budget/Transactions",
+    "Budget/Accounts",
+    "Budget/Settings",
+    "Budget/Settings/Categories",
+  ]);
+  assert.equal(plan.create.length, 16);
+});
+
+test("the plan names every edited file, and nothing that is already the default", async () => {
+  const app = fakeApp();
+  await ensureWorkspace(app);
+  await saveVaultJson(app, CONFIG_PATH, { default_currency: "USD" });
+
+  const plan = await planWorkspace(app);
+
+  assert.deepEqual(plan.reset, ["Budget/Settings/config.md"]);
+  assert.deepEqual(plan.create, []);
+  assert.deepEqual(plan.folders, []);
+});
+
+test("the plan says what the run then does, exactly", async () => {
+  const app = fakeApp();
+  await ensureWorkspace(app);
+  await saveVaultJson(app, CONFIG_PATH, { default_currency: "USD" });
+  app.vault.files.delete("Budget/Accounts/Cash.md");
+
+  const plan = await planWorkspace(app);
+  const result = await ensureWorkspace(app);
+
+  assert.deepEqual(result.replaced, plan.reset);
+  assert.deepEqual(result.created, plan.create);
 });

@@ -59,8 +59,9 @@ Step 1 writes the whole tree, already filled in.
 > **It is also a reset.** Every file the command writes — the settings notes, `Cash`,
 > `Bank1` and the eight category notes — goes back to its default each time you run it, so
 > a budget, a colour, a card ending or a learned keyword on one of those notes is replaced.
-> Your transactions, your inbox, and any account or category you added yourself are never
-> touched.
+> When that would overwrite anything, it lists the files by name and asks first; a fresh
+> vault, or a run that only fills in what is missing, is never asked. Your transactions and
+> any account or category you added yourself are never touched.
 
 ```text
 <vault>/Budget/

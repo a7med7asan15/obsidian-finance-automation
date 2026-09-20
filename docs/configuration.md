@@ -13,7 +13,8 @@ every file below, already filled in, and the Budget view edits all of them.
 
 Running that command again is a **reset**: every file on this page goes back to its default,
 including the keywords the Merchants tab has learned and any budget or colour set on a
-starting category. Transactions are never touched.
+starting category. It names the files it would overwrite and asks before doing it.
+Transactions are never touched.
 
 ---
 

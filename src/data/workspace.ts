@@ -82,6 +82,80 @@ const DEFAULT_ACCOUNTS: AccountDraft[] = [
   },
 ];
 
+interface Seed {
+  path: string;
+  content: string;
+}
+
+/**
+ * Every file the command owns, with the exact bytes it would write. One list,
+ * used both to say what a run would do and to do it, so the warning a user
+ * confirms can never describe something other than what follows.
+ */
+function workspaceSeeds(app: App): Seed[] {
+  const seeds: Seed[] = [{ path: INBOX_README, content: INBOX_README_BODY }];
+
+  for (const file of SETTINGS_FILES) {
+    const json = JSON.stringify(file.content, null, 2);
+    // A legacy `.json` is the live file for a vault that has one, so the reset
+    // lands there; writing the note instead would shadow it silently.
+    const legacy = normalizePath(legacyJsonPath(file.path));
+    if (app.vault.getAbstractFileByPath(legacy)) seeds.push({ path: legacy, content: `${json}\n` });
+    else seeds.push({ path: file.path, content: `${file.intro}\n${withJsonBlock("", json)}` });
+  }
+
+  for (const account of DEFAULT_ACCOUNTS) {
+    seeds.push({ path: accountNotePath(account.name), content: accountNote(account) });
+  }
+
+  for (const category of DEFAULT_CATEGORIES) {
+    seeds.push({
+      path: categoryNotePath(category.name),
+      content: categoryNote({
+        name: category.name,
+        currency: "EGP",
+        color: null,
+        icon: null,
+        monthlyBudget: null,
+      }),
+    });
+  }
+
+  return seeds.map((seed) => ({ ...seed, path: normalizePath(seed.path) }));
+}
+
+export interface WorkspacePlan {
+  /** Folders that are not there yet. */
+  folders: string[];
+  /** Files that would be written where there is nothing today. */
+  create: string[];
+  /** Files that hold something else and would go back to their defaults. */
+  reset: string[];
+}
+
+/**
+ * What `ensureWorkspace` would do, without doing any of it. The `reset` list is
+ * what a user stands to lose, so it is what the confirmation shows.
+ */
+export async function planWorkspace(app: App): Promise<WorkspacePlan> {
+  const plan: WorkspacePlan = { folders: [], create: [], reset: [] };
+
+  for (const folder of WORKSPACE_FOLDERS) {
+    const path = normalizePath(folder);
+    if (!app.vault.getAbstractFileByPath(path)) plan.folders.push(path);
+  }
+
+  for (const seed of workspaceSeeds(app)) {
+    const existing = app.vault.getAbstractFileByPath(seed.path);
+    if (!existing) plan.create.push(seed.path);
+    else if (existing instanceof TFile && (await app.vault.cachedRead(existing)) !== seed.content) {
+      plan.reset.push(seed.path);
+    }
+  }
+
+  return plan;
+}
+
 export interface WorkspaceResult {
   /** Folders and files this run created, in the order they were made. */
   created: string[];
@@ -100,12 +174,11 @@ export interface WorkspaceResult {
  * category note that is already there is rewritten back to its default, so a
  * colour, a monthly budget, a card ending or a learned keyword on one of those
  * notes is replaced. That is what makes the command a way back to a known
- * state; it is also why the settings pane says so before the button.
+ * state, and why nothing calls it without `planWorkspace` and a confirmation
+ * first — see `setUpWorkspace`.
  *
- * What it never touches: transactions, the inbox, and any account or category
- * note whose name is not one of the defaults. A settings file an older release
- * wrote as `.json` is reset where it lies rather than gaining a `.md` twin —
- * two files holding the same settings is how one of them goes stale unread.
+ * What it never touches: transactions, and any account or category note whose
+ * name is not one of the defaults.
  */
 export async function ensureWorkspace(app: App): Promise<WorkspaceResult> {
   const result: WorkspaceResult = { created: [], replaced: [], unchanged: [] };
@@ -120,32 +193,8 @@ export async function ensureWorkspace(app: App): Promise<WorkspaceResult> {
     result.created.push(path);
   }
 
-  await writeSeed(app, result, INBOX_README, INBOX_README_BODY);
-
-  for (const file of SETTINGS_FILES) {
-    const body = withJsonBlock("", JSON.stringify(file.content, null, 2));
-    // A legacy `.json` is the live file for a vault that has one, so the reset
-    // lands there; writing the note instead would shadow it silently.
-    const legacy = normalizePath(legacyJsonPath(file.path));
-    if (app.vault.getAbstractFileByPath(legacy)) {
-      await writeSeed(app, result, legacy, `${JSON.stringify(file.content, null, 2)}\n`);
-      continue;
-    }
-    await writeSeed(app, result, file.path, `${file.intro}\n${body}`);
-  }
-
-  for (const account of DEFAULT_ACCOUNTS) {
-    await writeSeed(app, result, accountNotePath(account.name), accountNote(account));
-  }
-
-  for (const category of DEFAULT_CATEGORIES) {
-    await writeSeed(app, result, categoryNotePath(category.name), categoryNote({
-      name: category.name,
-      currency: "EGP",
-      color: null,
-      icon: null,
-      monthlyBudget: null,
-    }));
+  for (const seed of workspaceSeeds(app)) {
+    await writeSeed(app, result, seed.path, seed.content);
   }
 
   return result;

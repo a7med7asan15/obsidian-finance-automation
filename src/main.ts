@@ -12,7 +12,7 @@ import { createCategoryNote } from "./data/categories.ts";
 import { createStructuredTransaction } from "./data/create.ts";
 import type { ProtocolParams } from "./data/create.ts";
 import { describeInbox, ingestInbox } from "./data/inbox.ts";
-import { describeWorkspace, ensureWorkspace } from "./data/workspace.ts";
+import { setUpWorkspace } from "./ui/workspace-setup.ts";
 import { isTransactionPath, parserChanges } from "./data/records.ts";
 import { applyFilter } from "./domain/filter.ts";
 import { cairoToday, periodLabel } from "./domain/dates.ts";
@@ -104,13 +104,7 @@ export default class FinanceAutomationPlugin extends Plugin {
     this.addCommand({
       id: "create-budget-folders",
       name: "Create budget folders",
-      callback: async () => {
-        try {
-          new Notice(describeWorkspace(await ensureWorkspace(this.app)), 8000);
-        } catch (error) {
-          new Notice(`Budget: could not create the files — ${(error as Error).message}`, 8000);
-        }
-      },
+      callback: () => void setUpWorkspace(this.app),
     });
 
     this.addCommand({

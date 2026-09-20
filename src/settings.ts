@@ -1,8 +1,8 @@
-import { Notice, PluginSettingTab, Setting } from "obsidian";
+import { PluginSettingTab, Setting } from "obsidian";
 import type { App } from "obsidian";
 import { VAULT_ROOT } from "./constants.ts";
-import { describeWorkspace, ensureWorkspace } from "./data/workspace.ts";
 import { RulesEditorModal } from "./ui/components/rules-editor.ts";
+import { setUpWorkspace } from "./ui/workspace-setup.ts";
 import type FinanceAutomationPlugin from "./main.ts";
 
 export interface FinanceSettings {
@@ -41,15 +41,13 @@ export class FinanceAutomationSettingTab extends PluginSettingTab {
         `Write the ${VAULT_ROOT} tree — inbox, transactions, settings notes, two accounts ` +
           "and a starting set of categories. Every file it writes is reset to its default, " +
           "so budgets, colours, card endings and learned keywords on those notes are " +
-          "replaced. Your transactions are never touched.",
+          "replaced — it lists them and asks first. Your transactions are never touched.",
       )
       .addButton((button) =>
         button.setButtonText("Create folders").onClick(async () => {
           button.setDisabled(true);
           try {
-            new Notice(describeWorkspace(await ensureWorkspace(this.app)), 8000);
-          } catch (error) {
-            new Notice(`Budget: could not create the files — ${(error as Error).message}`, 8000);
+            await setUpWorkspace(this.app);
           } finally {
             button.setDisabled(false);
           }
