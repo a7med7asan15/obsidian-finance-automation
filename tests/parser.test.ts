@@ -6,7 +6,10 @@ import {
 } from "../src/domain/parser/sms.ts";
 import { buildAccount } from "../src/data/records.ts";
 import { categorize } from "../src/domain/categorize.ts";
-import { DEFAULT_KEYWORDS, DEFAULT_PARTY_PATTERNS, withDefaultPatterns } from "../src/domain/parser/defaults.ts";
+import {
+  DEFAULT_DATE_PATTERNS, DEFAULT_KEYWORDS, DEFAULT_MATCH_PATTERNS, DEFAULT_PARTY_PATTERNS,
+  withDefaultPatterns,
+} from "../src/domain/parser/defaults.ts";
 import type { SmsPatterns, AccountConfig, CategoryRules } from "../src/domain/parser/sms.ts";
 
 const PATTERNS: SmsPatterns = {
@@ -276,7 +279,8 @@ test("withDefaultPatterns appends the built-in party patterns after the vault's 
     ...PATTERNS.merchant_patterns!, ...DEFAULT_PARTY_PATTERNS.merchant_patterns,
   ]);
   assert.deepEqual(merged.recipient_patterns, DEFAULT_PARTY_PATTERNS.recipient_patterns);
-  // Nothing else is topped up: a pattern removed from the vault file stays removed.
+  // A vault that wrote its own amount and card patterns keeps exactly those:
+  // a pattern removed from that file stays removed.
   assert.deepEqual(merged.amount_patterns, PATTERNS.amount_patterns);
   assert.deepEqual(merged.card_ending_patterns, PATTERNS.card_ending_patterns);
 });
@@ -290,7 +294,11 @@ test("withDefaultPatterns adds no duplicate when the vault already has a default
 
 test("withDefaultPatterns tops up the debit keywords too", () => {
   const merged = withDefaultPatterns({ debit_keywords: ["purchase"] });
-  assert.deepEqual(merged.debit_keywords, ["purchase", ...DEFAULT_KEYWORDS.debit_keywords]);
+  // The vault's own comes first, and a built-in it already lists is not repeated.
+  assert.deepEqual(merged.debit_keywords, [
+    "purchase",
+    ...DEFAULT_KEYWORDS.debit_keywords.filter((word) => word !== "purchase"),
+  ]);
 });
 
 test("a vault with no keywords at all still reads the two Arabic wordings", () => {
@@ -401,4 +409,169 @@ test("an English debit is unaffected by the incoming-transfer rule", () => {
   const result = parse("Card 0774 purchase amount EGP 1,420.50 at Carrefour on 05/09");
   assert.equal(result.from_account, "CIB");
   assert.equal(result.to_account, "");
+});
+
+const BUILT_IN = withDefaultPatterns(PATTERNS);
+
+test("withDefaultPatterns tops up the date patterns, so a vault that wrote none still reads a date", () => {
+  assert.deepEqual(withDefaultPatterns({}).date_patterns, DEFAULT_DATE_PATTERNS.date_patterns);
+  assert.deepEqual(
+    withDefaultPatterns({ date_patterns: ["(?i)x"] }).date_patterns,
+    ["(?i)x", ...DEFAULT_DATE_PATTERNS.date_patterns],
+  );
+});
+
+test("the built-in date patterns read HSBC's day-first date and 24-hour time", () => {
+  assert.equal(
+    extractTimestamp(
+      "Your HSBC Account ********9001 was debited with IPN outward transfer for EGP 7,007.00 on 08-09-2026 10:23 to AYA ABDALLAH ATTIA ATTIA with reference 01d2a6d2.",
+      BUILT_IN,
+    ),
+    "2026-09-08T10:23:00+03:00",
+  );
+});
+
+test("the built-in date patterns read slashes, dots, seconds and an ISO date", () => {
+  assert.equal(extractTimestamp("paid on 5/9/2026", BUILT_IN), "2026-09-05T00:00:00+03:00");
+  assert.equal(extractTimestamp("paid on 05.09.2026 at 14:07:31", BUILT_IN), "2026-09-05T14:07:31+03:00");
+  assert.equal(extractTimestamp("paid on 2026-09-05 14:07", BUILT_IN), "2026-09-05T14:07:00+03:00");
+  assert.equal(extractTimestamp("بتاريخ 08/09/2026 الساعة 10:23", BUILT_IN), "2026-09-08T10:23:00+03:00");
+});
+
+test("the built-in date patterns do not read a card or reference number as a date", () => {
+  assert.equal(extractTimestamp("purchase with card 4012-3456-7890 at Carrefour", BUILT_IN), null);
+  assert.equal(extractTimestamp("EGP 100 debited, reference 01d2a6d2", BUILT_IN), null);
+});
+
+test("a vault date pattern still wins over the built-in day-first reading", () => {
+  const monthFirst = withDefaultPatterns({
+    date_patterns: ["(?i)(?P<month>[0-9]{1,2})-(?P<day>[0-9]{1,2})-(?P<year>[0-9]{4})"],
+  });
+  assert.equal(extractTimestamp("charged on 08-09-2026", monthFirst), "2026-08-09T00:00:00+03:00");
+});
+
+/**
+ * The fresh-install case: a vault with no Budget/Settings/sms_patterns.json.
+ * main.ts loads that file with {} as the fallback, so this is exactly what the
+ * parser is handed on a phone the plugin was just installed on.
+ */
+const FRESH = withDefaultPatterns({});
+const NO_ACCOUNTS: AccountConfig = { accounts: [] };
+const HSBC_SMS =
+  "Your HSBC Account ********9001 was debited with IPN outward transfer for EGP 7,007.00 " +
+  "on 08-09-2026 10:23 to AYA ABDALLAH ATTIA ATTIA with reference 01d2a6d2. " +
+  "For further details, please contact HSBC call centre";
+
+test("a vault with no sms_patterns.json still reads the amount, the card and the direction", () => {
+  const result = parseSms(HSBC_SMS, "2026-09-20T12:00:00+03:00", {}, FRESH, NO_ACCOUNTS, CATEGORIES);
+  assert.equal(result.amount, 7007);
+  assert.equal(result.currency, "EGP");
+  assert.equal(result.transaction_type, "transfer");
+  assert.equal(result.recipient, "AYA ABDALLAH ATTIA ATTIA");
+  // No account note lists 9001 yet, so it is filed to the stand-in rather than nowhere.
+  assert.equal(result.from_account, placeholderAccount("9001"));
+});
+
+test("the same vault, once an account note claims the ending, resolves it and parses fully", () => {
+  const accounts = mergeAccountSources(
+    [buildAccount({ name: "HSBC", currency: "EGP", card_endings: ["9001"] }, "HSBC.md")],
+    { accounts: [] },
+  );
+  const result = parseSms(HSBC_SMS, "2026-09-20T12:00:00+03:00", {}, FRESH, accounts, CATEGORIES);
+  assert.equal(result.from_account, "HSBC");
+  assert.equal(result.status, "parsed");
+  assert.equal(result.parser_confidence, 1);
+});
+
+test("the built-in amount patterns read a currency on either side and a thousands separator", () => {
+  const read = (sms: string) =>
+    parseSms(sms, "2026-09-20T12:00:00+03:00", {}, FRESH, NO_ACCOUNTS, CATEGORIES);
+  assert.equal(read("debited EGP 1,234.56").amount, 1234.56);
+  assert.equal(read("debited 1,234.56 EGP").amount, 1234.56);
+  assert.equal(read("debited with amount: 90 USD").currency, "USD");
+  assert.equal(read("تم خصم مبلغ 250.75 ج.م").amount, 250.75);
+});
+
+test("the built-in amount patterns fall back to the vault's default currency", () => {
+  const result = parseSms(
+    "debited with amount 500", "2026-09-20T12:00:00+03:00",
+    { default_currency: "EGP" }, FRESH, NO_ACCOUNTS, CATEGORIES,
+  );
+  assert.equal(result.amount, 500);
+  assert.equal(result.currency, "EGP");
+});
+
+test("a bare 'fee' is not a built-in keyword, so COFFEE stays spending", () => {
+  const result = parseSms(
+    "Your card 9001 was charged EGP 85.00 at COFFEE SHOP MAADI",
+    "2026-09-20T12:00:00+03:00", {}, FRESH, NO_ACCOUNTS, CATEGORIES,
+  );
+  assert.equal(result.transaction_type, "debit");
+  assert.notEqual(result.category, "Fees");
+});
+
+test("a real fee wording is still read as one", () => {
+  const result = parseSms(
+    "EGP 50.00 debited from your account as a monthly fee",
+    "2026-09-20T12:00:00+03:00", {}, FRESH, NO_ACCOUNTS, CATEGORIES,
+  );
+  assert.equal(result.transaction_type, "fee");
+  assert.equal(result.category, "Fees");
+});
+
+test("the amount and card patterns fall back only when the vault wrote none", () => {
+  assert.deepEqual(withDefaultPatterns({}).amount_patterns, DEFAULT_MATCH_PATTERNS.amount_patterns);
+  assert.deepEqual(
+    withDefaultPatterns({}).card_ending_patterns,
+    DEFAULT_MATCH_PATTERNS.card_ending_patterns,
+  );
+  // A vault list is taken exactly as written — not appended to, so its order still decides.
+  const own = { amount_patterns: ["(?i)(?P<amount>[0-9]+)"] };
+  assert.deepEqual(withDefaultPatterns(own).amount_patterns, own.amount_patterns);
+  assert.deepEqual(withDefaultPatterns(PATTERNS).amount_patterns, PATTERNS.amount_patterns);
+});
+
+test("the transfer and fee keywords are topped up rather than replaced", () => {
+  assert.deepEqual(
+    withDefaultPatterns({ transfer_keywords: ["حوالة"] }).transfer_keywords,
+    ["حوالة", ...DEFAULT_KEYWORDS.transfer_keywords],
+  );
+  assert.deepEqual(withDefaultPatterns({}).fee_keywords, DEFAULT_KEYWORDS.fee_keywords);
+});
+
+test("the built-in Arabic card pattern reads the possessive forms the debit keywords use", () => {
+  const read = (sms: string) =>
+    parseSms(sms, "2026-09-20T12:00:00+03:00", { default_currency: "EGP" }, FRESH, NO_ACCOUNTS, CATEGORIES);
+  assert.equal(read("تم خصم مبلغ 320.50 ج.م من بطاقتك 4821 لدى كارفور").from_account,
+    placeholderAccount("4821"));
+  assert.equal(read("تم تنفيذ تحويل بمبلغ 2,000 ج.م من حسابك 9001 إلى محمد علي").from_account,
+    placeholderAccount("9001"));
+  assert.equal(read("تم اضافة 500 ج.م إلى حسابكم 3310").to_account, placeholderAccount("3310"));
+});
+
+/**
+ * A card-network descriptor, which is not a tidy shop name: the network splices
+ * the merchant's own tag onto the product with a `*`, and the country follows
+ * after a comma. The date is the short year the same message carries.
+ */
+const CARD_NETWORK_SMS =
+  "Your Covered Card *7147 was charged for USD22.80 at ANTHROPIC* CLAUDE SUB, " +
+  "UNITED STATES on 19/09/26 at 20:29. Your available card limit is EGP74203.59";
+
+test("a card-network descriptor keeps its punctuation instead of losing the merchant", () => {
+  const result = parseSms(
+    CARD_NETWORK_SMS, "2026-09-20T12:00:00+03:00", {}, FRESH, NO_ACCOUNTS, CATEGORIES,
+  );
+  assert.equal(result.merchant, "ANTHROPIC* CLAUDE SUB");
+  assert.equal(result.amount, 22.8);
+  assert.equal(result.currency, "USD");
+  assert.equal(result.transaction_type, "debit");
+  assert.equal(result.from_account, placeholderAccount("7147"));
+});
+
+test("the built-in date patterns read a two-digit year as this century", () => {
+  assert.equal(extractTimestamp(CARD_NETWORK_SMS, FRESH), "2026-09-19T20:29:00+03:00");
+  assert.equal(extractTimestamp("paid on 5/9/26", FRESH), "2026-09-05T00:00:00+03:00");
+  // The four-digit reading is tried first, so a full year is never cut to two.
+  assert.equal(extractTimestamp("paid on 5/9/2026", FRESH), "2026-09-05T00:00:00+03:00");
 });

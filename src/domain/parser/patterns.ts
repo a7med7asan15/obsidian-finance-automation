@@ -1,5 +1,5 @@
 /**
- * Settings/sms_patterns.json uses Python-flavoured regular expressions, because
+ * Settings/sms_patterns.md uses Python-flavoured regular expressions, because
  * the original processor was Python. That file is user-editable, so the
  * translation stays rather than migrating the file.
  */

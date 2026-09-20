@@ -72,7 +72,7 @@ export class MerchantsTab {
       renderEmptyState(
         container, "store", "No names yet",
         records.length
-          ? "None of these transactions name anyone yet. Try reading the stored messages again, widen the period, or add your bank's wording to merchant_patterns in Budget/Settings/sms_patterns.json."
+          ? "None of these transactions name anyone yet. Try reading the stored messages again, widen the period, or add your bank's wording to merchant_patterns in Budget/Settings/sms_patterns.md."
           : "No transactions match these filters. Try a different period.",
       );
       if (unnamed) this.renderFillButton(container, unnamed);

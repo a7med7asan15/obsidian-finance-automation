@@ -1,5 +1,7 @@
-import { PluginSettingTab, Setting } from "obsidian";
+import { Notice, PluginSettingTab, Setting } from "obsidian";
 import type { App } from "obsidian";
+import { VAULT_ROOT } from "./constants.ts";
+import { describeWorkspace, ensureWorkspace } from "./data/workspace.ts";
 import { RulesEditorModal } from "./ui/components/rules-editor.ts";
 import type FinanceAutomationPlugin from "./main.ts";
 
@@ -32,6 +34,27 @@ export class FinanceAutomationSettingTab extends PluginSettingTab {
     containerEl.createEl("p", {
       text: "The same local engine runs on desktop and mobile, parsing pending notes and keeping the budget view up to date.",
     });
+
+    new Setting(containerEl)
+      .setName("Budget folders")
+      .setDesc(
+        `Write the ${VAULT_ROOT} tree — inbox, transactions, settings notes, two accounts ` +
+          "and a starting set of categories. Every file it writes is reset to its default, " +
+          "so budgets, colours, card endings and learned keywords on those notes are " +
+          "replaced. Your transactions are never touched.",
+      )
+      .addButton((button) =>
+        button.setButtonText("Create folders").onClick(async () => {
+          button.setDisabled(true);
+          try {
+            new Notice(describeWorkspace(await ensureWorkspace(this.app)), 8000);
+          } catch (error) {
+            new Notice(`Budget: could not create the files — ${(error as Error).message}`, 8000);
+          } finally {
+            button.setDisabled(false);
+          }
+        }),
+      );
 
     new Setting(containerEl)
       .setName("Process when Obsidian starts")

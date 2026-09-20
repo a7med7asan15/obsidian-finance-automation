@@ -58,7 +58,7 @@ date, a one-time code or an offer carries an amount and a card number too, so le
 would arrive as a transaction that never happened; instead it is discarded and its file
 deleted, and the notice counts how many. Forward the whole bank thread if that is easier:
 only the transactions in it will land. Add `transaction_keywords` to
-`Budget/Settings/sms_patterns.json` if your bank uses a wording the built-in list misses —
+`Budget/Settings/sms_patterns.md` if your bank uses a wording the built-in list misses —
 entries there are tried alongside the built-in ones, never instead of them.
 
 To pull the inbox in by hand, run **Import messages from the SMS inbox** from the command
@@ -75,11 +75,11 @@ Whatever the inbox captures is parsed in the vault, from the message text alone.
 The note is created with `status: pending` and the full message stored in `sms_message`
 and in the **Original SMS** block. Processing starts automatically a moment later and
 fills in the rest from the text alone, using
-`Budget/Settings/sms_patterns.json`:
+`Budget/Settings/sms_patterns.md`:
 
 | Field | Read from the message by |
 |---|---|
-| `amount`, `currency` | `amount_patterns`, falling back to `default_currency` in `config.json` |
+| `amount`, `currency` | `amount_patterns`, falling back to `default_currency` in `config.md` |
 | `from_account` / `to_account` | `card_ending_patterns` — the account or card number in the message, looked up in `card_endings` on the account notes in `Budget/Accounts/` |
 | whether it is parsed at all | `transaction_keywords` plus the built-in list — a message that names no money moving is discarded |
 | `transaction_type` | the `debit`, `credit`, `transfer`, and `fee` keyword lists |
@@ -102,7 +102,7 @@ aliases:
   - "cib"
 ```
 
-`Budget/Settings/accounts.json` holds the same shape and still works for an account with
+`Budget/Settings/accounts.md` holds the same shape and still works for an account with
 no note yet. Both sources are merged by name, so an ending listed in either one resolves
 to the account.
 

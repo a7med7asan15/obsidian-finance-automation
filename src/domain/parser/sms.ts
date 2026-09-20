@@ -86,7 +86,7 @@ const uniqueStrings = (values: string[]): string[] => {
 };
 
 /**
- * Merges the account notes in `Budget/Accounts/` over `Budget/Settings/accounts.json`
+ * Merges the account notes in `Budget/Accounts/` over `Budget/Settings/accounts.md`
  * so the notes are the single place card endings and aliases are maintained. The JSON
  * file still works for an account that has no note yet. Entries are matched by name,
  * case-insensitively, and their endings and aliases are unioned rather than replaced —
@@ -259,12 +259,23 @@ export function parseSms(
  * Patterns come from the same user-editable file and use the same translation,
  * with named groups `year`, `month`, `day` and optional `hour`, `minute`, `second`.
  */
+/**
+ * A two-digit year as the century we are in. A bank writes `19/09/26` as often
+ * as it writes `19/09/2026`, and padding the short one with zeroes instead
+ * would file the transaction in the year 26 — a date `Date.parse` accepts
+ * happily, so nothing downstream would notice. Nothing wider is needed: these
+ * are messages about money that has just moved.
+ */
+function expandYear(year: string): string {
+  return year.length === 2 ? String(2000 + Number(year)) : year;
+}
+
 export function extractTimestamp(sms: string, patterns: SmsPatterns): string | null {
   const match = extractByPatterns(sms, patterns.date_patterns);
   const groups = match?.groups;
   if (!groups) return null;
 
-  const year = groups.year ?? "";
+  const year = expandYear(groups.year ?? "");
   const month = groups.month ?? "";
   const day = groups.day ?? "";
   if (!year || !month || !day) return null;

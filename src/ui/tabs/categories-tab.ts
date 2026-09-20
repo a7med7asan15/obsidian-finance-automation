@@ -107,7 +107,7 @@ export class CategoriesTab {
       problem.createEl("strong", { text: "The keyword rules could not be read:" });
       problem.createEl("pre", { text: this.rulesError });
       problem.createEl("p", {
-        text: "Fix Budget/Settings/Categories/rules.json, then reopen the Budget view. " +
+        text: "Fix Budget/Settings/Categories/rules.md, then reopen the Budget view. " +
           "Colours and budgets can still be changed; keywords cannot, because saving " +
           "them would discard the rules that failed to load.",
       });

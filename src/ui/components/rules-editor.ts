@@ -59,7 +59,7 @@ export class RulesEditorModal extends Modal {
       const problem = contentEl.createDiv({ cls: "fin-rule-error" });
       problem.createEl("strong", { text: "Some rules could not be read:" });
       problem.createEl("pre", { text: this.loadError });
-      problem.createEl("p", { text: "Fix Budget/Settings/exclusion_rules.json, then reopen this window. Saving from here would discard the rules that failed to load." });
+      problem.createEl("p", { text: "Fix Budget/Settings/exclusion_rules.md, then reopen this window. Saving from here would discard the rules that failed to load." });
       return;
     }
 

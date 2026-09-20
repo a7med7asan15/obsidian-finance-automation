@@ -1,10 +1,10 @@
-import { Notice, Plugin } from "obsidian";
+import { Notice, Plugin, normalizePath } from "obsidian";
 import {
-  ACCOUNTS_JSON_PATH,
+  ACCOUNTS_CONFIG_PATH,
   CATEGORY_RULES_PATH,
   CONFIG_PATH,
   INBOX_DIR,
-  SETTINGS_DIR,
+  SMS_PATTERNS_PATH,
 } from "./constants.ts";
 import { registerFinanceCodeBlock } from "./codeblock.ts";
 import { TransactionIndex } from "./data/index-store.ts";
@@ -12,6 +12,7 @@ import { createCategoryNote } from "./data/categories.ts";
 import { createStructuredTransaction } from "./data/create.ts";
 import type { ProtocolParams } from "./data/create.ts";
 import { describeInbox, ingestInbox } from "./data/inbox.ts";
+import { describeWorkspace, ensureWorkspace } from "./data/workspace.ts";
 import { isTransactionPath, parserChanges } from "./data/records.ts";
 import { applyFilter } from "./domain/filter.ts";
 import { cairoToday, periodLabel } from "./domain/dates.ts";
@@ -34,7 +35,6 @@ import { TransactionSheet } from "./ui/components/transaction-sheet.ts";
 import type { Filter, TransactionRecord } from "./data/types.ts";
 import type { FinanceSettings } from "./settings.ts";
 
-const SMS_PATTERNS_PATH = `${SETTINGS_DIR}/sms_patterns.json`;
 
 interface VaultConfig {
   default_currency?: string;
@@ -102,12 +102,29 @@ export default class FinanceAutomationPlugin extends Plugin {
     });
 
     this.addCommand({
+      id: "create-budget-folders",
+      name: "Create budget folders",
+      callback: async () => {
+        try {
+          new Notice(describeWorkspace(await ensureWorkspace(this.app)), 8000);
+        } catch (error) {
+          new Notice(`Budget: could not create the files — ${(error as Error).message}`, 8000);
+        }
+      },
+    });
+
+    this.addCommand({
       id: "import-sms-inbox",
       name: "Import messages from the SMS inbox",
       callback: async () => {
         const captured = await this.captureInbox();
         if (captured) void this.runFinance(false);
-        else new Notice(`Budget: no messages waiting in ${INBOX_DIR}.`);
+        else if (!(await this.app.vault.adapter.exists(normalizePath(INBOX_DIR)))) {
+          new Notice(
+            `Budget: ${INBOX_DIR} does not exist yet. Run "Create budget folders" first.`,
+            8000,
+          );
+        } else new Notice(`Budget: no messages waiting in ${INBOX_DIR}.`);
       },
     });
 
@@ -360,11 +377,11 @@ export default class FinanceAutomationPlugin extends Plugin {
     const [config, patterns, accountsJson, categories] = await Promise.all([
       loadVaultJson<VaultConfig>(this.app, CONFIG_PATH, { default_currency: "EGP" }),
       this.loadPatterns(),
-      loadVaultJson<AccountConfig>(this.app, ACCOUNTS_JSON_PATH, { accounts: [] }),
+      loadVaultJson<AccountConfig>(this.app, ACCOUNTS_CONFIG_PATH, { accounts: [] }),
       loadVaultJson<CategoryRules>(this.app, CATEGORY_RULES_PATH, { rules: [] }),
     ]);
     // The account notes are the source of truth for card endings and aliases;
-    // accounts.json only covers accounts that have no note yet.
+    // the accounts settings note only covers accounts that have no note yet.
     return {
       config,
       patterns,
