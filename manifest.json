@@ -1,7 +1,7 @@
 {
   "id": "ultra-budget-tracker",
   "name": "Ultra Budget Tracker",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "minAppVersion": "1.7.2",
   "description": "Turn bank SMS messages into structured transaction notes, then track spending, budgets, merchants and account balances in a built-in budget view. Runs entirely offline on desktop and mobile.",
   "author": "Ahmed Hassan",
