@@ -8,6 +8,8 @@ export type TransactionType = "debit" | "credit" | "transfer" | "fee" | "";
 export type CounterpartyRole = "merchant" | "recipient" | "sender" | "";
 export type TransactionStatus = "pending" | "parsed";
 export type ExcludeSource = "manual" | "rule" | null;
+/** Who last decided a transaction's type, when it was not the parser. */
+export type TypeSource = "manual" | "rule" | null;
 
 export interface TransactionRecord {
   path: string;
@@ -39,6 +41,11 @@ export interface TransactionRecord {
   excludeReason: string;
   excludeSource: ExcludeSource;
   excludeRuleId: string;
+  typeSource: TypeSource;
+  /** The type rule in force, when `typeSource` is "rule". */
+  typeRuleId: string;
+  /** What the type was before a rule changed it — what turning the rule off restores. */
+  typeBeforeRule: TransactionType;
   /** Lower-cased counterparty + sms + category + accounts, for substring search. */
   searchBlob: string;
 }

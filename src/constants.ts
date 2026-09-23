@@ -11,6 +11,7 @@ export const CATEGORIES_DIR = `${SETTINGS_DIR}/Categories`;
  * see `resolveSettingsPath`.
  */
 export const RULES_PATH = `${SETTINGS_DIR}/exclusion_rules.md`;
+export const TYPE_RULES_PATH = `${SETTINGS_DIR}/type_rules.md`;
 export const CONFIG_PATH = `${SETTINGS_DIR}/config.md`;
 export const ACCOUNTS_CONFIG_PATH = `${SETTINGS_DIR}/accounts.md`;
 export const SMS_PATTERNS_PATH = `${SETTINGS_DIR}/sms_patterns.md`;

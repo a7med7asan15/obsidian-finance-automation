@@ -5,10 +5,16 @@ import { readCounterparty } from "../domain/counterparty.ts";
 import { TRANSACTIONS_DIR } from "../constants.ts";
 import type {
   AccountRecord, CategoryRecord, ExcludeSource, TransactionRecord, TransactionStatus, TransactionType,
+  TypeSource,
 } from "./types.ts";
 
 const TYPES: TransactionType[] = ["debit", "credit", "transfer", "fee"];
 const STATUSES: TransactionStatus[] = ["pending", "parsed"];
+
+function readType(value: unknown): TransactionType {
+  const raw = readString(value).toLowerCase() as TransactionType;
+  return TYPES.includes(raw) ? raw : "";
+}
 
 function basename(path: string): string {
   return path.split("/").pop()?.replace(/\.md$/, "") ?? path;
@@ -29,8 +35,10 @@ export function buildTransaction(
   const timestamp = readString(frontmatter.timestamp);
   const parts = toDateParts(timestamp);
 
-  const rawType = readString(frontmatter.transaction_type).toLowerCase() as TransactionType;
-  const type: TransactionType = TYPES.includes(rawType) ? rawType : "";
+  const type = readType(frontmatter.transaction_type);
+  const rawTypeSource = readString(frontmatter.type_source).toLowerCase();
+  const typeSource: TypeSource =
+    rawTypeSource === "rule" || rawTypeSource === "manual" ? rawTypeSource : null;
 
   const rawStatus = readString(frontmatter.status).toLowerCase() as TransactionStatus;
   const status: TransactionStatus = STATUSES.includes(rawStatus) ? rawStatus : "pending";
@@ -78,6 +86,9 @@ export function buildTransaction(
     excludeReason: readString(frontmatter.exclude_reason),
     excludeSource,
     excludeRuleId: readString(frontmatter.exclude_rule_id),
+    typeSource,
+    typeRuleId: typeSource === "rule" ? readString(frontmatter.type_rule_id) : "",
+    typeBeforeRule: typeSource === "rule" ? readType(frontmatter.type_before_rule) : "",
     // Whitespace is collapsed because a bank pads its messages with runs of
     // spaces, and a search typed with single ones would otherwise miss them.
     searchBlob: [counterparty, smsMessage, category, fromAccount, toAccount]
@@ -188,4 +199,36 @@ export function parserChanges(
     changes[key] = value;
   }
   return changes;
+}
+
+/**
+ * The record as it will read once `changes` are written, so a later step in the
+ * same pass — a type rule after the parser, an exclusion rule after a type rule
+ * — sees what the note is about to say rather than what it said before.
+ */
+export function withChanges(
+  record: TransactionRecord,
+  changes: Record<string, unknown>,
+): TransactionRecord {
+  const next = { ...record };
+  const party = ["merchant", "recipient", "sender"] as const;
+  for (const role of party) {
+    const value = changes[role];
+    if (typeof value === "string" && value) {
+      next.counterparty = value;
+      next.counterpartyRole = role;
+    }
+  }
+  for (const [key, value] of Object.entries(changes)) {
+    if ((party as readonly string[]).includes(key)) continue;
+    if (key === "type_source") next.typeSource = (value || null) as TypeSource;
+    else if (key === "type_rule_id") next.typeRuleId = readString(value);
+    else if (key === "type_before_rule") next.typeBeforeRule = readType(value);
+    else if (key === "transaction_type") next.type = readType(value);
+    else {
+      const recordKey = toRecordKey(key);
+      if (recordKey) (next as Record<string, unknown>)[recordKey] = value ?? "";
+    }
+  }
+  return next;
 }

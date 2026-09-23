@@ -575,3 +575,18 @@ test("the built-in date patterns read a two-digit year as this century", () => {
   // The four-digit reading is tried first, so a full year is never cut to two.
   assert.equal(extractTimestamp("paid on 5/9/2026", FRESH), "2026-09-05T00:00:00+03:00");
 });
+
+test("a type already decided keeps the account on the side that type needs", async () => {
+  const { parseSms } = await import("../src/domain/parser/sms.ts");
+  const { withDefaultPatterns } = await import("../src/domain/parser/defaults.ts");
+  const accounts = { accounts: [{ name: "CIB", card_endings: ["1234"] }] };
+  const sms = "EGP 50.00 charged to card 1234 cashback";
+  const natural = parseSms(sms, "", {}, withDefaultPatterns({}), accounts, { rules: [] });
+  assert.equal(natural.transaction_type, "debit");
+  assert.equal(natural.from_account, "CIB");
+
+  const forced = parseSms(sms, "", {}, withDefaultPatterns({}), accounts, { rules: [] }, "credit");
+  assert.equal(forced.transaction_type, "credit");
+  assert.equal(forced.from_account, "");
+  assert.equal(forced.to_account, "CIB");
+});

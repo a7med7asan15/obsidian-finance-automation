@@ -13,13 +13,14 @@ import { createStructuredTransaction } from "./data/create.ts";
 import type { ProtocolParams } from "./data/create.ts";
 import { describeInbox, ingestInbox } from "./data/inbox.ts";
 import { setUpWorkspace } from "./ui/workspace-setup.ts";
-import { isTransactionPath, parserChanges } from "./data/records.ts";
+import { isTransactionPath, parserChanges, withChanges } from "./data/records.ts";
 import { applyFilter } from "./domain/filter.ts";
 import { cairoToday, periodLabel } from "./domain/dates.ts";
 import { exportCsv } from "./ui/export-csv.ts";
-import { loadRules, loadVaultJson } from "./data/vault-json.ts";
+import { loadRules, loadTypeRules, loadVaultJson } from "./data/vault-json.ts";
 import { updateTransaction } from "./data/write.ts";
-import { resolveExclusion } from "./domain/exclusion.ts";
+import { resolveExclusion, type ExclusionRule } from "./domain/exclusion.ts";
+import { resolveTypeRule, type TypeRule } from "./domain/type-rules.ts";
 import { isPlaceholderAccount, mergeAccountSources, parseSms } from "./domain/parser/sms.ts";
 import { counterpartyFields, readCounterparty } from "./domain/counterparty.ts";
 import { sameName } from "./domain/names.ts";
@@ -30,7 +31,7 @@ import { FilterStore } from "./store/filter-store.ts";
 import { BUDGET_VIEW_TYPE, BudgetView } from "./ui/budget-view.ts";
 import type { BudgetTab } from "./ui/budget-view.ts";
 import { AddTransactionModal } from "./ui/components/add-transaction-modal.ts";
-import { RulesEditorModal } from "./ui/components/rules-editor.ts";
+import { RulesEditorModal, TypeRulesEditorModal } from "./ui/components/rules-editor.ts";
 import { TransactionSheet } from "./ui/components/transaction-sheet.ts";
 import type { Filter, TransactionRecord } from "./data/types.ts";
 import type { FinanceSettings } from "./settings.ts";
@@ -163,6 +164,12 @@ export default class FinanceAutomationPlugin extends Plugin {
       id: "edit-exclusion-rules",
       name: "Edit exclusion rules",
       callback: () => new RulesEditorModal(this.app, this).open(),
+    });
+
+    this.addCommand({
+      id: "edit-type-rules",
+      name: "Edit spending and income rules",
+      callback: () => new TypeRulesEditorModal(this.app, this).open(),
     });
 
     this.addCommand({
@@ -414,6 +421,7 @@ export default class FinanceAutomationPlugin extends Plugin {
   async processPending(): Promise<number> {
     const { config, patterns, accounts, categories } = await this.loadParserInputs();
     const { rules } = await loadRules(this.app);
+    const { rules: typeRules } = await loadTypeRules(this.app);
 
     let updated = 0;
     for (const record of this.index.transactions()) {
@@ -429,14 +437,19 @@ export default class FinanceAutomationPlugin extends Plugin {
       const needsParsing =
         (record.status !== "parsed" || provisional) && Boolean(record.smsMessage);
       if (needsParsing) {
-        const parsed = parseSms(record.smsMessage, record.timestamp, config, patterns, accounts, categories);
+        // A type a rule or a person settled is kept, so the account lands on
+        // the side that type needs rather than the side the keywords suggest.
+        const forced = record.typeSource ? record.type : "";
+        const parsed = parseSms(
+          record.smsMessage, record.timestamp, config, patterns, accounts, categories, forced,
+        );
         changes = parserChanges(record, parsed);
       }
 
-      if (this.settings.applyExclusionRules) {
-        const exclusion = resolveExclusion(record, rules);
-        if (exclusion) Object.assign(changes, exclusion);
-      }
+      Object.assign(
+        changes,
+        this.ruleChanges(withChanges(record, changes), typeRules, rules, this.settings.applyExclusionRules),
+      );
 
       if (!Object.keys(changes).length) continue;
       this.ignoreWatchUntil.set(record.path, Date.now() + 2000);
@@ -497,14 +510,34 @@ export default class FinanceAutomationPlugin extends Plugin {
     return moved;
   }
 
+  /**
+   * What the rules change on one note: the type rules first, then the exclusion
+   * rules against the note as the type rules leave it, so an exclusion that
+   * names a type sees the type the note is about to have.
+   */
+  private ruleChanges(
+    record: TransactionRecord,
+    typeRules: TypeRule[],
+    exclusionRules: ExclusionRule[],
+    withExclusions: boolean,
+  ): Record<string, unknown> {
+    const changes: Record<string, unknown> = { ...resolveTypeRule(record, typeRules) };
+    if (withExclusions) {
+      Object.assign(changes, resolveExclusion(withChanges(record, changes), exclusionRules));
+    }
+    return changes;
+  }
+
+  /** Runs both kinds of rule over every transaction, whatever the automatic setting says. */
   async applyRulesToAll(): Promise<number> {
     const { rules } = await loadRules(this.app);
+    const { rules: typeRules } = await loadTypeRules(this.app);
     let updated = 0;
     for (const record of this.index.transactions()) {
-      const exclusion = resolveExclusion(record, rules);
-      if (!exclusion) continue;
+      const changes = this.ruleChanges(record, typeRules, rules, true);
+      if (!Object.keys(changes).length) continue;
       this.ignoreWatchUntil.set(record.path, Date.now() + 2000);
-      await updateTransaction(this.app, record.path, { ...exclusion });
+      await updateTransaction(this.app, record.path, changes);
       updated += 1;
     }
     return updated;

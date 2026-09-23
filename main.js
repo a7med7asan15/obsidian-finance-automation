@@ -32,6 +32,7 @@ var ACCOUNTS_DIR = `${VAULT_ROOT}Accounts`;
 var SETTINGS_DIR = `${VAULT_ROOT}Settings`;
 var CATEGORIES_DIR = `${SETTINGS_DIR}/Categories`;
 var RULES_PATH = `${SETTINGS_DIR}/exclusion_rules.md`;
+var TYPE_RULES_PATH = `${SETTINGS_DIR}/type_rules.md`;
 var CONFIG_PATH = `${SETTINGS_DIR}/config.md`;
 var ACCOUNTS_CONFIG_PATH = `${SETTINGS_DIR}/accounts.md`;
 var SMS_PATTERNS_PATH = `${SETTINGS_DIR}/sms_patterns.md`;
@@ -907,7 +908,7 @@ function accountCandidates(sms, ending, accounts) {
   if (!found.length && ending) found.push(placeholderAccount(ending));
   return found;
 }
-function parseSms(sms, timestamp, config, patterns, accounts, categories) {
+function parseSms(sms, timestamp, config, patterns, accounts, categories, forcedType = "") {
   const amountMatch = extractByPatterns(sms, patterns.amount_patterns);
   const amountText = amountMatch?.groups?.amount?.replaceAll(",", "");
   const amount = amountText && Number.isFinite(Number(amountText)) ? Number(amountText) : null;
@@ -923,11 +924,7 @@ function parseSms(sms, timestamp, config, patterns, accounts, categories) {
   const isFee = hasKeyword(sms, patterns.fee_keywords);
   const isCredit = hasKeyword(sms, patterns.credit_keywords);
   const isDebit = hasKeyword(sms, patterns.debit_keywords);
-  let transactionType = "";
-  if (isTransfer) transactionType = "transfer";
-  else if (isFee && !isCredit) transactionType = "fee";
-  else if (isCredit && !isDebit) transactionType = "credit";
-  else if (isDebit && !isCredit) transactionType = "debit";
+  const transactionType = forcedType || (isTransfer ? "transfer" : isFee && !isCredit ? "fee" : isCredit && !isDebit ? "credit" : isDebit && !isCredit ? "debit" : "");
   const role = roleForType(transactionType);
   const merchantName = extractParty(sms, patterns.merchant_patterns);
   const counterparty = role === "sender" ? extractParty(sms, patterns.sender_patterns) || merchantName : role === "recipient" ? extractParty(sms, patterns.recipient_patterns) || merchantName : merchantName || extractParty(sms, patterns.recipient_patterns);
@@ -984,6 +981,10 @@ function extractTimestamp(sms, patterns) {
 // src/data/records.ts
 var TYPES = ["debit", "credit", "transfer", "fee"];
 var STATUSES = ["pending", "parsed"];
+function readType(value) {
+  const raw = readString(value).toLowerCase();
+  return TYPES.includes(raw) ? raw : "";
+}
 function basename(path) {
   return path.split("/").pop()?.replace(/\.md$/, "") ?? path;
 }
@@ -993,8 +994,9 @@ function isTransactionPath(path) {
 function buildTransaction(frontmatter, path) {
   const timestamp = readString(frontmatter.timestamp);
   const parts = toDateParts(timestamp);
-  const rawType = readString(frontmatter.transaction_type).toLowerCase();
-  const type = TYPES.includes(rawType) ? rawType : "";
+  const type = readType(frontmatter.transaction_type);
+  const rawTypeSource = readString(frontmatter.type_source).toLowerCase();
+  const typeSource = rawTypeSource === "rule" || rawTypeSource === "manual" ? rawTypeSource : null;
   const rawStatus = readString(frontmatter.status).toLowerCase();
   const status = STATUSES.includes(rawStatus) ? rawStatus : "pending";
   const excluded = readBoolean(frontmatter.excluded, false);
@@ -1034,6 +1036,9 @@ function buildTransaction(frontmatter, path) {
     excludeReason: readString(frontmatter.exclude_reason),
     excludeSource,
     excludeRuleId: readString(frontmatter.exclude_rule_id),
+    typeSource,
+    typeRuleId: typeSource === "rule" ? readString(frontmatter.type_rule_id) : "",
+    typeBeforeRule: typeSource === "rule" ? readType(frontmatter.type_before_rule) : "",
     // Whitespace is collapsed because a bank pads its messages with runs of
     // spaces, and a search typed with single ones would otherwise miss them.
     searchBlob: [counterparty, smsMessage, category, fromAccount, toAccount].filter(Boolean).join(" ").replace(/\s+/gu, " ").toLowerCase()
@@ -1105,6 +1110,29 @@ function parserChanges(record, parsed) {
     changes[key2] = value;
   }
   return changes;
+}
+function withChanges(record, changes) {
+  const next = { ...record };
+  const party = ["merchant", "recipient", "sender"];
+  for (const role of party) {
+    const value = changes[role];
+    if (typeof value === "string" && value) {
+      next.counterparty = value;
+      next.counterpartyRole = role;
+    }
+  }
+  for (const [key2, value] of Object.entries(changes)) {
+    if (party.includes(key2)) continue;
+    if (key2 === "type_source") next.typeSource = value || null;
+    else if (key2 === "type_rule_id") next.typeRuleId = readString(value);
+    else if (key2 === "type_before_rule") next.typeBeforeRule = readType(value);
+    else if (key2 === "transaction_type") next.type = readType(value);
+    else {
+      const recordKey = toRecordKey(key2);
+      if (recordKey) next[recordKey] = value ?? "";
+    }
+  }
+  return next;
 }
 
 // src/data/index-store.ts
@@ -1315,6 +1343,22 @@ here; the editor writes this block back in the shape it expects.`
     )
   },
   {
+    path: TYPE_RULES_PATH,
+    content: { rules: [] },
+    intro: heading(
+      "Spending and income rules",
+      `Rules that decide what a message counts as \u2014 spending, income, a transfer or a
+fee \u2014 when the keywords in \`sms_patterns\` get one merchant or one wording wrong:
+a cashback the bank words like a purchase, a salary that arrives as a transfer.
+The first rule that matches wins, and the account moves to the side the new type
+needs. Turning a rule off puts the transaction back the way the parser read it,
+and a type you change by hand always beats a rule.
+
+Edit these under **Settings \u2192 Ultra Budget Tracker \u2192 Spending and income rules**
+rather than here; the editor writes this block back in the shape it expects.`
+    )
+  },
+  {
     path: CATEGORY_RULES_PATH,
     content: DEFAULT_CATEGORY_RULES,
     intro: heading(
@@ -1499,6 +1543,61 @@ function validateRule(rule) {
   return errors;
 }
 
+// src/domain/type-rules.ts
+var RULE_TYPES = ["debit", "credit", "transfer", "fee"];
+var RULE_TYPE_LABELS = {
+  debit: "Spending",
+  credit: "Income",
+  transfer: "Transfer",
+  fee: "Fee"
+};
+function placeAccounts(record, type) {
+  if (type === "debit" || type === "fee") {
+    return { from_account: record.fromAccount || record.toAccount, to_account: "" };
+  }
+  if (type === "credit") {
+    return { from_account: "", to_account: record.toAccount || record.fromAccount };
+  }
+  return { from_account: record.fromAccount, to_account: record.toAccount };
+}
+function retype(record, type) {
+  return {
+    transaction_type: type,
+    ...placeAccounts(record, type),
+    // Only rename the key the party sits under when there is a party: an empty
+    // name written under all three keys would say nothing new.
+    ...record.counterparty ? counterpartyFields(record.counterparty, roleForType(type)) : {}
+  };
+}
+function resolveTypeRule(record, rules) {
+  if (!record.smsMessage || record.typeSource === "manual") return null;
+  const ruled = record.typeSource === "rule";
+  const baseline = ruled ? record.typeBeforeRule : record.type;
+  const placed = placeAccounts(record, baseline);
+  const base = ruled ? { ...record, type: baseline, fromAccount: placed.from_account, toAccount: placed.to_account } : record;
+  const rule = firstMatchingRule(base, rules);
+  if (!rule) {
+    if (!ruled) return null;
+    return { ...retype(base, baseline), type_source: null, type_rule_id: null, type_before_rule: null };
+  }
+  if (ruled && record.typeRuleId === rule.id && record.type === rule.type) return null;
+  if (!ruled && record.type === rule.type) return null;
+  return {
+    ...retype(base, rule.type),
+    type_source: "rule",
+    type_rule_id: rule.id,
+    type_before_rule: baseline
+  };
+}
+function validateTypeRule(rule) {
+  const errors = validateRule(rule);
+  const type = rule?.type;
+  if (!RULE_TYPES.includes(type)) {
+    errors.push(`Rule type must be one of ${RULE_TYPES.join(", ")}.`);
+  }
+  return errors;
+}
+
 // src/data/vault-json.ts
 async function ensureFolder(app, path) {
   const normalized = (0, import_obsidian3.normalizePath)(path);
@@ -1580,14 +1679,14 @@ ${withJsonBlock("", json)}` : `${json}
 `
   );
 }
-async function loadRules(app) {
+async function loadRuleFile(app, path, validate) {
   try {
-    const data = await loadVaultJson(app, RULES_PATH, { rules: [] });
+    const data = await loadVaultJson(app, path, { rules: [] });
     const candidates = Array.isArray(data.rules) ? data.rules : [];
     const rules = [];
     const problems = [];
     for (const candidate of candidates) {
-      const errors = validateRule(candidate);
+      const errors = validate(candidate);
       if (errors.length) problems.push(`${candidate?.id ?? "?"}: ${errors.join(" ")}`);
       else rules.push(candidate);
     }
@@ -1596,8 +1695,17 @@ async function loadRules(app) {
     return { rules: [], error: error.message };
   }
 }
+function loadRules(app) {
+  return loadRuleFile(app, RULES_PATH, validateRule);
+}
 async function saveRules(app, rules) {
   await saveVaultJson(app, RULES_PATH, { rules });
+}
+function loadTypeRules(app) {
+  return loadRuleFile(app, TYPE_RULES_PATH, validateTypeRule);
+}
+async function saveTypeRules(app, rules) {
+  await saveVaultJson(app, TYPE_RULES_PATH, { rules });
 }
 
 // src/data/create.ts
@@ -2450,16 +2558,73 @@ var OP_LABELS = {
   lt: "is less than",
   between: "is between"
 };
-var RulesEditorModal = class extends import_obsidian11.Modal {
-  constructor(app, plugin) {
+var EXCLUSION_RULES = {
+  title: "Exclusion rules",
+  intro: "A matching transaction is excluded from every calculation but stays in the list. A transaction you excluded by hand is never touched by a rule.",
+  file: "Budget/Settings/exclusion_rules.md",
+  load: loadRules,
+  save: saveRules,
+  validate: validateRule,
+  blank: () => ({
+    id: `rule-${Date.now().toString(36)}`,
+    name: "",
+    enabled: true,
+    reason: "",
+    match: "all",
+    conditions: [{ field: "sms_message", op: "contains", value: "" }]
+  }),
+  outcome: () => "",
+  drawFields(container, rule) {
+    new import_obsidian11.Setting(container).setName("Reason").setDesc("Shown on every transaction this rule excludes.").addText(
+      (text) => text.setPlaceholder("Transfer between my own accounts").setValue(rule.reason).onChange((value) => {
+        rule.reason = value;
+      })
+    );
+  },
+  decidedByHand: (record) => record.excluded && record.excludeSource === "manual",
+  finish(rule) {
+    if (!rule.reason) rule.reason = rule.name;
+  }
+};
+var TYPE_RULES = {
+  title: "Spending and income rules",
+  intro: "Decides what a message counts as when the keywords read it wrong. The first matching rule wins, and the account moves to the side the new type needs. Only transactions read from a message are changed, and a type you set by hand is never touched by a rule.",
+  file: "Budget/Settings/type_rules.md",
+  load: loadTypeRules,
+  save: saveTypeRules,
+  validate: validateTypeRule,
+  blank: () => ({
+    id: `type-${Date.now().toString(36)}`,
+    name: "",
+    enabled: true,
+    type: "credit",
+    match: "all",
+    conditions: [{ field: "sms_message", op: "contains", value: "" }]
+  }),
+  outcome: (rule) => ` \u2192 ${RULE_TYPE_LABELS[rule.type]}`,
+  drawFields(container, rule) {
+    new import_obsidian11.Setting(container).setName("Counts as").setDesc("What a matching transaction becomes.").addDropdown((dropdown) => {
+      for (const type of RULE_TYPES) dropdown.addOption(type, RULE_TYPE_LABELS[type]);
+      dropdown.setValue(rule.type).onChange((value) => {
+        rule.type = value;
+      });
+    });
+  },
+  decidedByHand: (record) => record.typeSource === "manual" || !record.smsMessage,
+  finish: () => {
+  }
+};
+var RuleListModal = class extends import_obsidian11.Modal {
+  constructor(app, plugin, kind) {
     super(app);
     this.plugin = plugin;
+    this.kind = kind;
     this.rules = [];
     this.loadError = null;
   }
   async onOpen() {
     this.modalEl.addClass("fin-sheet");
-    const loaded = await loadRules(this.app);
+    const loaded = await this.kind.load(this.app);
     this.rules = loaded.rules;
     this.loadError = loaded.error;
     this.draw();
@@ -2467,16 +2632,13 @@ var RulesEditorModal = class extends import_obsidian11.Modal {
   draw() {
     const { contentEl } = this;
     contentEl.empty();
-    contentEl.createEl("h2", { text: "Exclusion rules" });
-    contentEl.createEl("p", {
-      cls: "fin-sheet-note",
-      text: "A matching transaction is excluded from every calculation but stays in the list. A transaction you excluded by hand is never touched by a rule."
-    });
+    contentEl.createEl("h2", { text: this.kind.title });
+    contentEl.createEl("p", { cls: "fin-sheet-note", text: this.kind.intro });
     if (this.loadError) {
       const problem = contentEl.createDiv({ cls: "fin-rule-error" });
       problem.createEl("strong", { text: "Some rules could not be read:" });
       problem.createEl("pre", { text: this.loadError });
-      problem.createEl("p", { text: "Fix Budget/Settings/exclusion_rules.md, then reopen this window. Saving from here would discard the rules that failed to load." });
+      problem.createEl("p", { text: `Fix ${this.kind.file}, then reopen this window. Saving from here would discard the rules that failed to load.` });
       return;
     }
     const records = this.plugin.index.transactions();
@@ -2494,7 +2656,7 @@ var RulesEditorModal = class extends import_obsidian11.Modal {
       );
       setting.addButton(
         (button) => button.setIcon("pencil").setTooltip("Edit").onClick(() => {
-          new RuleEditModal(this.app, this.plugin, rule, async (updated) => {
+          new RuleEditModal(this.app, this.plugin, this.kind, rule, async (updated) => {
             const position = this.rules.findIndex((item) => item.id === rule.id);
             this.rules[position] = updated;
             await this.persist();
@@ -2513,7 +2675,7 @@ var RulesEditorModal = class extends import_obsidian11.Modal {
     const actions = contentEl.createDiv({ cls: "fin-sheet-actions" });
     const add = actions.createEl("button", { text: "New rule" });
     add.addEventListener("click", () => {
-      new RuleEditModal(this.app, this.plugin, null, async (created) => {
+      new RuleEditModal(this.app, this.plugin, this.kind, null, async (created) => {
         this.rules.push(created);
         await this.persist();
         this.draw();
@@ -2528,29 +2690,34 @@ var RulesEditorModal = class extends import_obsidian11.Modal {
   }
   describe(rule) {
     const joiner = rule.match === "all" ? " and " : " or ";
-    return rule.conditions.map((condition) => `${FIELD_LABELS[condition.field]} ${OP_LABELS[condition.op]} "${condition.value}"`).join(joiner);
+    const conditions = rule.conditions.map((condition) => `${FIELD_LABELS[condition.field]} ${OP_LABELS[condition.op]} "${condition.value}"`).join(joiner);
+    return `${conditions}${this.kind.outcome(rule)}`;
   }
   async persist() {
     try {
-      await saveRules(this.app, this.rules);
+      await this.kind.save(this.app, this.rules);
     } catch (error) {
       new import_obsidian11.Notice(`Could not save the rules: ${error.message}`);
     }
   }
 };
+var RulesEditorModal = class extends RuleListModal {
+  constructor(app, plugin) {
+    super(app, plugin, EXCLUSION_RULES);
+  }
+};
+var TypeRulesEditorModal = class extends RuleListModal {
+  constructor(app, plugin) {
+    super(app, plugin, TYPE_RULES);
+  }
+};
 var RuleEditModal = class extends import_obsidian11.Modal {
-  constructor(app, plugin, existing, onSave) {
+  constructor(app, plugin, kind, existing, onSave) {
     super(app);
     this.plugin = plugin;
+    this.kind = kind;
     this.onSave = onSave;
-    this.rule = existing ? structuredClone(existing) : {
-      id: `rule-${Date.now().toString(36)}`,
-      name: "",
-      enabled: true,
-      reason: "",
-      match: "all",
-      conditions: [{ field: "sms_message", op: "contains", value: "" }]
-    };
+    this.rule = existing ? structuredClone(existing) : kind.blank();
   }
   onOpen() {
     this.modalEl.addClass("fin-sheet");
@@ -2565,11 +2732,7 @@ var RuleEditModal = class extends import_obsidian11.Modal {
         this.rule.name = value;
       })
     );
-    new import_obsidian11.Setting(contentEl).setName("Reason").setDesc("Shown on every transaction this rule excludes.").addText(
-      (text) => text.setPlaceholder("Transfer between my own accounts").setValue(this.rule.reason).onChange((value) => {
-        this.rule.reason = value;
-      })
-    );
+    this.kind.drawFields(contentEl, this.rule);
     new import_obsidian11.Setting(contentEl).setName("Match").addDropdown((dropdown) => {
       dropdown.addOption("all", "All conditions");
       dropdown.addOption("any", "Any condition");
@@ -2636,7 +2799,7 @@ var RuleEditModal = class extends import_obsidian11.Modal {
   /** Shows what the rule would catch before it is saved. */
   refreshPreview() {
     this.previewEl.empty();
-    const errors = validateRule(this.rule);
+    const errors = this.kind.validate(this.rule);
     if (errors.length) {
       this.previewEl.createEl("p", { cls: "fin-rule-error-text", text: errors[0] });
       return;
@@ -2646,11 +2809,11 @@ var RuleEditModal = class extends import_obsidian11.Modal {
     this.previewEl.createEl("p", {
       text: `Matches ${matches.length} of ${records.length} transactions.`
     });
-    const manual = matches.filter((record) => record.excluded && record.excludeSource === "manual").length;
+    const manual = matches.filter((record) => this.kind.decidedByHand(record)).length;
     if (manual) {
       this.previewEl.createEl("p", {
         cls: "fin-sheet-note",
-        text: `${manual} of those were excluded by hand and will not be changed.`
+        text: `${manual} of those were decided by hand and will not be changed.`
       });
     }
     const list = this.previewEl.createEl("ul", { cls: "fin-rule-preview-list" });
@@ -2661,12 +2824,12 @@ var RuleEditModal = class extends import_obsidian11.Modal {
     }
   }
   async save() {
-    const errors = validateRule(this.rule);
+    const errors = this.kind.validate(this.rule);
     if (errors.length) {
       new import_obsidian11.Notice(errors.join("\n"));
       return;
     }
-    if (!this.rule.reason) this.rule.reason = this.rule.name;
+    this.kind.finish(this.rule);
     await this.onSave(this.rule);
     this.close();
   }
@@ -2716,6 +2879,11 @@ var FinanceAutomationSettingTab = class extends import_obsidian12.PluginSettingT
     new import_obsidian12.Setting(containerEl).setName("Exclusion rules").setDesc("Rules that automatically exclude matching transactions from calculations.").addButton(
       (button) => button.setButtonText("Edit rules").onClick(() => {
         new RulesEditorModal(this.app, this.plugin).open();
+      })
+    );
+    new import_obsidian12.Setting(containerEl).setName("Spending and income rules").setDesc("Rules that decide whether a matching message counts as spending, income, a transfer or a fee.").addButton(
+      (button) => button.setButtonText("Edit rules").onClick(() => {
+        new TypeRulesEditorModal(this.app, this.plugin).open();
       })
     );
     new import_obsidian12.Setting(containerEl).setName("Apply exclusion rules automatically").setDesc("Run the exclusion rules whenever a transaction note is created or changed.").addToggle(
@@ -5245,7 +5413,10 @@ var TransactionSheet = class extends import_obsidian26.Modal {
         exclude_reason: this.draft.excluded ? this.draft.excludeReason || "Excluded by hand" : null,
         // Editing by hand always makes the decision manual, so no rule will undo it.
         exclude_source: this.draft.excluded ? "manual" : null,
-        exclude_rule_id: null
+        exclude_rule_id: null,
+        // Only a type actually changed here becomes a manual one; saving an
+        // untouched type leaves a rule free to keep managing it.
+        ...this.draft.type !== this.record.type ? { type_source: "manual", type_rule_id: null, type_before_rule: null } : {}
       });
       this.close();
     } catch (error) {
@@ -5350,6 +5521,11 @@ var FinanceAutomationPlugin = class extends import_obsidian27.Plugin {
       id: "edit-exclusion-rules",
       name: "Edit exclusion rules",
       callback: () => new RulesEditorModal(this.app, this).open()
+    });
+    this.addCommand({
+      id: "edit-type-rules",
+      name: "Edit spending and income rules",
+      callback: () => new TypeRulesEditorModal(this.app, this).open()
     });
     this.addCommand({
       id: "apply-exclusion-rules",
@@ -5551,19 +5727,29 @@ var FinanceAutomationPlugin = class extends import_obsidian27.Plugin {
   async processPending() {
     const { config, patterns, accounts, categories } = await this.loadParserInputs();
     const { rules } = await loadRules(this.app);
+    const { rules: typeRules } = await loadTypeRules(this.app);
     let updated = 0;
     for (const record of this.index.transactions()) {
       let changes = {};
       const provisional = isPlaceholderAccount(record.fromAccount) || isPlaceholderAccount(record.toAccount);
       const needsParsing = (record.status !== "parsed" || provisional) && Boolean(record.smsMessage);
       if (needsParsing) {
-        const parsed = parseSms(record.smsMessage, record.timestamp, config, patterns, accounts, categories);
+        const forced = record.typeSource ? record.type : "";
+        const parsed = parseSms(
+          record.smsMessage,
+          record.timestamp,
+          config,
+          patterns,
+          accounts,
+          categories,
+          forced
+        );
         changes = parserChanges(record, parsed);
       }
-      if (this.settings.applyExclusionRules) {
-        const exclusion = resolveExclusion(record, rules);
-        if (exclusion) Object.assign(changes, exclusion);
-      }
+      Object.assign(
+        changes,
+        this.ruleChanges(withChanges(record, changes), typeRules, rules, this.settings.applyExclusionRules)
+      );
       if (!Object.keys(changes).length) continue;
       this.ignoreWatchUntil.set(record.path, Date.now() + 2e3);
       await updateTransaction(this.app, record.path, changes);
@@ -5622,14 +5808,28 @@ var FinanceAutomationPlugin = class extends import_obsidian27.Plugin {
     }
     return moved;
   }
+  /**
+   * What the rules change on one note: the type rules first, then the exclusion
+   * rules against the note as the type rules leave it, so an exclusion that
+   * names a type sees the type the note is about to have.
+   */
+  ruleChanges(record, typeRules, exclusionRules, withExclusions) {
+    const changes = { ...resolveTypeRule(record, typeRules) };
+    if (withExclusions) {
+      Object.assign(changes, resolveExclusion(withChanges(record, changes), exclusionRules));
+    }
+    return changes;
+  }
+  /** Runs both kinds of rule over every transaction, whatever the automatic setting says. */
   async applyRulesToAll() {
     const { rules } = await loadRules(this.app);
+    const { rules: typeRules } = await loadTypeRules(this.app);
     let updated = 0;
     for (const record of this.index.transactions()) {
-      const exclusion = resolveExclusion(record, rules);
-      if (!exclusion) continue;
+      const changes = this.ruleChanges(record, typeRules, rules, true);
+      if (!Object.keys(changes).length) continue;
       this.ignoreWatchUntil.set(record.path, Date.now() + 2e3);
-      await updateTransaction(this.app, record.path, { ...exclusion });
+      await updateTransaction(this.app, record.path, changes);
       updated += 1;
     }
     return updated;

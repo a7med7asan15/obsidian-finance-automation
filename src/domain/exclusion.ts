@@ -22,13 +22,17 @@ export interface RuleCondition {
   value2?: string | number;
 }
 
-export interface ExclusionRule {
+/** What every kind of rule shares: a name, a switch, and the conditions it matches on. */
+export interface BaseRule {
   id: string;
   name: string;
   enabled: boolean;
-  reason: string;
   match: "all" | "any";
   conditions: RuleCondition[];
+}
+
+export interface ExclusionRule extends BaseRule {
+  reason: string;
 }
 
 export interface ExclusionChange {
@@ -95,7 +99,7 @@ function matchesCondition(record: TransactionRecord, condition: RuleCondition): 
   }
 }
 
-export function matchesRule(record: TransactionRecord, rule: ExclusionRule): boolean {
+export function matchesRule(record: TransactionRecord, rule: BaseRule): boolean {
   if (!rule.enabled) return false;
   if (!rule.conditions.length) return false;
   return rule.match === "any"
@@ -103,10 +107,10 @@ export function matchesRule(record: TransactionRecord, rule: ExclusionRule): boo
     : rule.conditions.every((condition) => matchesCondition(record, condition));
 }
 
-export function firstMatchingRule(
+export function firstMatchingRule<R extends BaseRule>(
   record: TransactionRecord,
-  rules: ExclusionRule[],
-): ExclusionRule | null {
+  rules: R[],
+): R | null {
   return rules.find((rule) => matchesRule(record, rule)) ?? null;
 }
 
@@ -150,7 +154,7 @@ export function resolveExclusion(
 
 export function validateRule(rule: unknown): string[] {
   const errors: string[] = [];
-  const candidate = rule as Partial<ExclusionRule>;
+  const candidate = rule as Partial<BaseRule>;
 
   if (!candidate || typeof candidate !== "object") return ["Rule must be an object."];
   if (!String(candidate.id ?? "").trim()) errors.push("Rule needs an id.");

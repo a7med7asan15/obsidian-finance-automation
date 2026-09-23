@@ -1,8 +1,9 @@
 import { TFile, TFolder, normalizePath } from "obsidian";
 import type { App } from "obsidian";
-import { RULES_PATH } from "../constants.ts";
+import { RULES_PATH, TYPE_RULES_PATH } from "../constants.ts";
 import { introFor } from "./settings-files.ts";
-import { validateRule, type ExclusionRule } from "../domain/exclusion.ts";
+import { validateRule, type BaseRule, type ExclusionRule } from "../domain/exclusion.ts";
+import { validateTypeRule, type TypeRule } from "../domain/type-rules.ts";
 
 export async function ensureFolder(app: App, path: string): Promise<void> {
   const normalized = normalizePath(path);
@@ -114,16 +115,20 @@ export async function saveVaultJson(app: App, path: string, value: unknown): Pro
  * Never throws. A malformed rules file yields zero rules plus an error message,
  * so the UI can offer a repair instead of the plugin failing to load.
  */
-export async function loadRules(app: App): Promise<{ rules: ExclusionRule[]; error: string | null }> {
+async function loadRuleFile<R extends BaseRule>(
+  app: App,
+  path: string,
+  validate: (rule: unknown) => string[],
+): Promise<{ rules: R[]; error: string | null }> {
   try {
-    const data = await loadVaultJson<{ rules?: unknown }>(app, RULES_PATH, { rules: [] });
+    const data = await loadVaultJson<{ rules?: unknown }>(app, path, { rules: [] });
     const candidates = Array.isArray(data.rules) ? data.rules : [];
-    const rules: ExclusionRule[] = [];
+    const rules: R[] = [];
     const problems: string[] = [];
     for (const candidate of candidates) {
-      const errors = validateRule(candidate);
-      if (errors.length) problems.push(`${(candidate as ExclusionRule)?.id ?? "?"}: ${errors.join(" ")}`);
-      else rules.push(candidate as ExclusionRule);
+      const errors = validate(candidate);
+      if (errors.length) problems.push(`${(candidate as R)?.id ?? "?"}: ${errors.join(" ")}`);
+      else rules.push(candidate as R);
     }
     return { rules, error: problems.length ? problems.join("\n") : null };
   } catch (error) {
@@ -131,6 +136,18 @@ export async function loadRules(app: App): Promise<{ rules: ExclusionRule[]; err
   }
 }
 
+export function loadRules(app: App): Promise<{ rules: ExclusionRule[]; error: string | null }> {
+  return loadRuleFile<ExclusionRule>(app, RULES_PATH, validateRule);
+}
+
 export async function saveRules(app: App, rules: ExclusionRule[]): Promise<void> {
   await saveVaultJson(app, RULES_PATH, { rules });
+}
+
+export function loadTypeRules(app: App): Promise<{ rules: TypeRule[]; error: string | null }> {
+  return loadRuleFile<TypeRule>(app, TYPE_RULES_PATH, validateTypeRule);
+}
+
+export async function saveTypeRules(app: App, rules: TypeRule[]): Promise<void> {
+  await saveVaultJson(app, TYPE_RULES_PATH, { rules });
 }

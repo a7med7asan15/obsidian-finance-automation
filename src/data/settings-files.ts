@@ -5,6 +5,7 @@ import {
   CONFIG_PATH,
   RULES_PATH,
   SMS_PATTERNS_PATH,
+  TYPE_RULES_PATH,
 } from "../constants.ts";
 import type { CategoryRules } from "../domain/categorize.ts";
 
@@ -144,6 +145,22 @@ always beats a rule.
 
 Edit these under **Settings → Ultra Budget Tracker → Edit rules** rather than
 here; the editor writes this block back in the shape it expects.`,
+    ),
+  },
+  {
+    path: TYPE_RULES_PATH,
+    content: { rules: [] },
+    intro: heading(
+      "Spending and income rules",
+      `Rules that decide what a message counts as — spending, income, a transfer or a
+fee — when the keywords in \`sms_patterns\` get one merchant or one wording wrong:
+a cashback the bank words like a purchase, a salary that arrives as a transfer.
+The first rule that matches wins, and the account moves to the side the new type
+needs. Turning a rule off puts the transaction back the way the parser read it,
+and a type you change by hand always beats a rule.
+
+Edit these under **Settings → Ultra Budget Tracker → Spending and income rules**
+rather than here; the editor writes this block back in the shape it expects.`,
     ),
   },
   {

@@ -171,6 +171,12 @@ export function parseSms(
   patterns: SmsPatterns,
   accounts: AccountConfig,
   categories: CategoryRules,
+  /**
+   * A type already decided by a rule or by hand. The keywords are then only
+   * asked which side of a transfer the account is on, so a note that is parsed
+   * again keeps its account on the side its type needs.
+   */
+  forcedType: TransactionType = "",
 ): ParsedSms {
   const amountMatch = extractByPatterns(sms, patterns.amount_patterns);
   const amountText = amountMatch?.groups?.amount?.replaceAll(",", "");
@@ -189,11 +195,13 @@ export function parseSms(
   const isCredit = hasKeyword(sms, patterns.credit_keywords);
   const isDebit = hasKeyword(sms, patterns.debit_keywords);
 
-  let transactionType: TransactionType = "";
-  if (isTransfer) transactionType = "transfer";
-  else if (isFee && !isCredit) transactionType = "fee";
-  else if (isCredit && !isDebit) transactionType = "credit";
-  else if (isDebit && !isCredit) transactionType = "debit";
+  const transactionType: TransactionType =
+    forcedType ||
+    (isTransfer ? "transfer"
+      : isFee && !isCredit ? "fee"
+      : isCredit && !isDebit ? "credit"
+      : isDebit && !isCredit ? "debit"
+      : "");
 
   // The name the message carries is the same thing whichever direction the
   // money went; only what to call it changes, and the type decides that. Each

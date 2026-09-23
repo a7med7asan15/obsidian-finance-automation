@@ -187,6 +187,43 @@ is what keeps a reference number or a due-date figure out of your ledger.
   `matches`, `gt`, `lt`, `between` (which also takes `value2`).
 - `match` — `all` or `any`.
 
+## Spending and income rules
+
+`Budget/Settings/type_rules.md`, or the editor under **Spending and income rules** in the
+plugin settings (also the command *Edit spending and income rules*). A rule says what a
+matching message counts as when the keywords read it wrong — a cashback the bank words
+like a purchase, a salary that arrives as a transfer:
+
+```json
+{
+  "rules": [
+    {
+      "id": "cashback",
+      "name": "Cashback is income",
+      "enabled": true,
+      "type": "credit",
+      "match": "all",
+      "conditions": [
+        { "field": "sms_message", "op": "contains", "value": "cashback" }
+      ]
+    }
+  ]
+}
+```
+
+- `type` — `debit` (spending), `credit` (income), `transfer` or `fee`.
+- `conditions` and `match` work exactly as they do for exclusion rules below.
+- The first matching rule wins. The account moves to the side the new type needs, and the
+  merchant becomes a sender (or back) to match.
+- The note records `type_source: rule`, the rule's id, and the type the parser had read, so
+  turning a rule off or deleting it puts the transaction back.
+- Only transactions read from a message are changed. A type you change by hand in the
+  transaction sheet is marked `type_source: manual`, and no rule touches it again.
+
+To change what counts as spending or income for **every** message that uses a word, add
+the word to `debit_keywords` or `credit_keywords` under [Parser patterns](#parser-patterns)
+instead — that decides the type before any rule runs.
+
 ## Plugin settings
 
 **Settings → Community plugins → Ultra Budget Tracker**: process on startup, watch

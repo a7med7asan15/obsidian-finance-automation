@@ -18,7 +18,7 @@ test("a fresh vault gains every folder, settings note, account and category", as
 
   assert.deepEqual(result.replaced, []);
   assert.deepEqual(result.unchanged, []);
-  assert.deepEqual(result.created.slice(0, 12), [
+  assert.deepEqual(result.created.slice(0, 13), [
     "Budget",
     "Budget/Inbox",
     "Budget/Transactions",
@@ -30,9 +30,10 @@ test("a fresh vault gains every folder, settings note, account and category", as
     "Budget/Settings/accounts.md",
     "Budget/Settings/sms_patterns.md",
     "Budget/Settings/exclusion_rules.md",
+    "Budget/Settings/type_rules.md",
     "Budget/Settings/Categories/rules.md",
   ]);
-  assert.deepEqual(result.created.slice(12, 14), ["Budget/Accounts/Cash.md", "Budget/Accounts/Bank1.md"]);
+  assert.deepEqual(result.created.slice(13, 15), ["Budget/Accounts/Cash.md", "Budget/Accounts/Bank1.md"]);
   for (const category of DEFAULT_CATEGORIES) {
     assert.ok(app.vault.files.has(`Budget/Settings/Categories/${category.name}.md`));
   }
@@ -176,7 +177,7 @@ test("the plan of a fresh vault has everything to make and nothing to lose", asy
     "Budget/Settings",
     "Budget/Settings/Categories",
   ]);
-  assert.equal(plan.create.length, 16);
+  assert.equal(plan.create.length, 17);
 });
 
 test("the plan names every edited file, and nothing that is already the default", async () => {

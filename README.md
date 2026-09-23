@@ -75,6 +75,7 @@ Step 1 writes the whole tree, already filled in.
     ├── accounts.md             ← accounts without a note of their own
     ├── sms_patterns.md         ← extra parser patterns, if your bank needs any
     ├── exclusion_rules.md      ← rules that keep a transaction out of the totals
+    ├── type_rules.md           ← rules that decide what counts as spending or income
     └── Categories/
         ├── rules.md            ← keyword → category
         └── Groceries.md …      ← one note per category, with colour and budget
@@ -130,7 +131,8 @@ excluded by hand is never overridden by a rule.
 | **Add transaction** | Adds one by hand |
 | **Edit categories and budgets** / **List merchants…** | Opens that tab |
 | **Edit exclusion rules** | Opens the rules editor |
-| **Apply exclusion rules to all transactions** | Re-runs every rule over everything |
+| **Edit spending and income rules** | Opens the editor for rules that set a transaction's type |
+| **Apply exclusion rules to all transactions** | Re-runs every rule, exclusion and type, over everything |
 | **Fill in missing merchants from stored messages** | Re-reads stored messages and fills only the blanks |
 | **Export filtered transactions as CSV** | Writes the current filter to a CSV in the vault |
 

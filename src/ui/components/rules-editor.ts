@@ -1,8 +1,11 @@
 import { Modal, Notice, Setting } from "obsidian";
 import type { App } from "obsidian";
-import { loadRules, saveRules } from "../../data/vault-json.ts";
+import { loadRules, loadTypeRules, saveRules, saveTypeRules } from "../../data/vault-json.ts";
 import { RULE_FIELDS, RULE_OPS, matchesRule, validateRule } from "../../domain/exclusion.ts";
-import type { ExclusionRule, RuleField, RuleOp } from "../../domain/exclusion.ts";
+import type { BaseRule, ExclusionRule, RuleField, RuleOp } from "../../domain/exclusion.ts";
+import { RULE_TYPES, RULE_TYPE_LABELS, validateTypeRule } from "../../domain/type-rules.ts";
+import type { RuleType, TypeRule } from "../../domain/type-rules.ts";
+import type { TransactionRecord } from "../../data/types.ts";
 import type FinanceAutomationPlugin from "../../main.ts";
 import { on } from "../events.ts";
 
@@ -30,17 +33,103 @@ const OP_LABELS: Record<RuleOp, string> = {
   between: "is between",
 };
 
-export class RulesEditorModal extends Modal {
-  private rules: ExclusionRule[] = [];
+/**
+ * What differs between one kind of rule and another. The list, the conditions
+ * and the preview are the same for every kind; what a rule *does* is not.
+ */
+interface RuleKind<R extends BaseRule> {
+  title: string;
+  intro: string;
+  /** The settings note, named when it cannot be read. */
+  file: string;
+  load(app: App): Promise<{ rules: R[]; error: string | null }>;
+  save(app: App, rules: R[]): Promise<void>;
+  validate(rule: unknown): string[];
+  blank(): R;
+  /** What the rule does, after the conditions it matches on. */
+  outcome(rule: R): string;
+  /** The settings above the conditions that say what the rule does. */
+  drawFields(container: HTMLElement, rule: R): void;
+  /** A matching transaction the rule will leave alone because a person decided it. */
+  decidedByHand(record: TransactionRecord): boolean;
+  /** Fills anything left blank before the rule is saved. */
+  finish(rule: R): void;
+}
+
+const EXCLUSION_RULES: RuleKind<ExclusionRule> = {
+  title: "Exclusion rules",
+  intro: "A matching transaction is excluded from every calculation but stays in the list. A transaction you excluded by hand is never touched by a rule.",
+  file: "Budget/Settings/exclusion_rules.md",
+  load: loadRules,
+  save: saveRules,
+  validate: validateRule,
+  blank: () => ({
+    id: `rule-${Date.now().toString(36)}`,
+    name: "",
+    enabled: true,
+    reason: "",
+    match: "all",
+    conditions: [{ field: "sms_message", op: "contains", value: "" }],
+  }),
+  outcome: () => "",
+  drawFields(container, rule) {
+    new Setting(container).setName("Reason")
+      .setDesc("Shown on every transaction this rule excludes.")
+      .addText((text) =>
+        text.setPlaceholder("Transfer between my own accounts").setValue(rule.reason)
+          .onChange((value) => { rule.reason = value; }),
+      );
+  },
+  decidedByHand: (record) => record.excluded && record.excludeSource === "manual",
+  finish(rule) {
+    if (!rule.reason) rule.reason = rule.name;
+  },
+};
+
+const TYPE_RULES: RuleKind<TypeRule> = {
+  title: "Spending and income rules",
+  intro: "Decides what a message counts as when the keywords read it wrong. The first matching rule wins, and the account moves to the side the new type needs. Only transactions read from a message are changed, and a type you set by hand is never touched by a rule.",
+  file: "Budget/Settings/type_rules.md",
+  load: loadTypeRules,
+  save: saveTypeRules,
+  validate: validateTypeRule,
+  blank: () => ({
+    id: `type-${Date.now().toString(36)}`,
+    name: "",
+    enabled: true,
+    type: "credit",
+    match: "all",
+    conditions: [{ field: "sms_message", op: "contains", value: "" }],
+  }),
+  outcome: (rule) => ` → ${RULE_TYPE_LABELS[rule.type]}`,
+  drawFields(container, rule) {
+    new Setting(container).setName("Counts as")
+      .setDesc("What a matching transaction becomes.")
+      .addDropdown((dropdown) => {
+        for (const type of RULE_TYPES) dropdown.addOption(type, RULE_TYPE_LABELS[type]);
+        dropdown.setValue(rule.type).onChange((value) => { rule.type = value as RuleType; });
+      });
+  },
+  decidedByHand: (record) => record.typeSource === "manual" || !record.smsMessage,
+  finish: () => {},
+};
+
+/** The list of one kind of rule, with a switch, an edit and a delete for each. */
+class RuleListModal<R extends BaseRule> extends Modal {
+  private rules: R[] = [];
   private loadError: string | null = null;
 
-  constructor(app: App, private readonly plugin: FinanceAutomationPlugin) {
+  constructor(
+    app: App,
+    private readonly plugin: FinanceAutomationPlugin,
+    private readonly kind: RuleKind<R>,
+  ) {
     super(app);
   }
 
   override async onOpen(): Promise<void> {
     this.modalEl.addClass("fin-sheet");
-    const loaded = await loadRules(this.app);
+    const loaded = await this.kind.load(this.app);
     this.rules = loaded.rules;
     this.loadError = loaded.error;
     this.draw();
@@ -49,17 +138,14 @@ export class RulesEditorModal extends Modal {
   private draw(): void {
     const { contentEl } = this;
     contentEl.empty();
-    contentEl.createEl("h2", { text: "Exclusion rules" });
-    contentEl.createEl("p", {
-      cls: "fin-sheet-note",
-      text: "A matching transaction is excluded from every calculation but stays in the list. A transaction you excluded by hand is never touched by a rule.",
-    });
+    contentEl.createEl("h2", { text: this.kind.title });
+    contentEl.createEl("p", { cls: "fin-sheet-note", text: this.kind.intro });
 
     if (this.loadError) {
       const problem = contentEl.createDiv({ cls: "fin-rule-error" });
       problem.createEl("strong", { text: "Some rules could not be read:" });
       problem.createEl("pre", { text: this.loadError });
-      problem.createEl("p", { text: "Fix Budget/Settings/exclusion_rules.md, then reopen this window. Saving from here would discard the rules that failed to load." });
+      problem.createEl("p", { text: `Fix ${this.kind.file}, then reopen this window. Saving from here would discard the rules that failed to load.` });
       return;
     }
 
@@ -84,7 +170,7 @@ export class RulesEditorModal extends Modal {
 
       setting.addButton((button) =>
         button.setIcon("pencil").setTooltip("Edit").onClick(() => {
-          new RuleEditModal(this.app, this.plugin, rule, async (updated) => {
+          new RuleEditModal(this.app, this.plugin, this.kind, rule, async (updated) => {
             const position = this.rules.findIndex((item) => item.id === rule.id);
             this.rules[position] = updated;
             await this.persist();
@@ -106,7 +192,7 @@ export class RulesEditorModal extends Modal {
 
     const add = actions.createEl("button", { text: "New rule" });
     add.addEventListener("click", () => {
-      new RuleEditModal(this.app, this.plugin, null, async (created) => {
+      new RuleEditModal(this.app, this.plugin, this.kind, null, async (created) => {
         this.rules.push(created);
         await this.persist();
         this.draw();
@@ -121,42 +207,47 @@ export class RulesEditorModal extends Modal {
     });
   }
 
-  private describe(rule: ExclusionRule): string {
+  private describe(rule: R): string {
     const joiner = rule.match === "all" ? " and " : " or ";
-    return rule.conditions
+    const conditions = rule.conditions
       .map((condition) => `${FIELD_LABELS[condition.field]} ${OP_LABELS[condition.op]} "${condition.value}"`)
       .join(joiner);
+    return `${conditions}${this.kind.outcome(rule)}`;
   }
 
   private async persist(): Promise<void> {
     try {
-      await saveRules(this.app, this.rules);
+      await this.kind.save(this.app, this.rules);
     } catch (error) {
       new Notice(`Could not save the rules: ${(error as Error).message}`);
     }
   }
 }
 
-export class RuleEditModal extends Modal {
-  private rule: ExclusionRule;
+export class RulesEditorModal extends RuleListModal<ExclusionRule> {
+  constructor(app: App, plugin: FinanceAutomationPlugin) {
+    super(app, plugin, EXCLUSION_RULES);
+  }
+}
+
+export class TypeRulesEditorModal extends RuleListModal<TypeRule> {
+  constructor(app: App, plugin: FinanceAutomationPlugin) {
+    super(app, plugin, TYPE_RULES);
+  }
+}
+
+class RuleEditModal<R extends BaseRule> extends Modal {
+  private rule: R;
 
   constructor(
     app: App,
     private readonly plugin: FinanceAutomationPlugin,
-    existing: ExclusionRule | null,
-    private readonly onSave: (rule: ExclusionRule) => Promise<void>,
+    private readonly kind: RuleKind<R>,
+    existing: R | null,
+    private readonly onSave: (rule: R) => Promise<void>,
   ) {
     super(app);
-    this.rule = existing
-      ? structuredClone(existing)
-      : {
-          id: `rule-${Date.now().toString(36)}`,
-          name: "",
-          enabled: true,
-          reason: "",
-          match: "all",
-          conditions: [{ field: "sms_message", op: "contains", value: "" }],
-        };
+    this.rule = existing ? structuredClone(existing) : kind.blank();
   }
 
   override onOpen(): void {
@@ -174,12 +265,7 @@ export class RuleEditModal extends Modal {
         .onChange((value) => { this.rule.name = value; }),
     );
 
-    new Setting(contentEl).setName("Reason")
-      .setDesc("Shown on every transaction this rule excludes.")
-      .addText((text) =>
-        text.setPlaceholder("Transfer between my own accounts").setValue(this.rule.reason)
-          .onChange((value) => { this.rule.reason = value; }),
-      );
+    this.kind.drawFields(contentEl, this.rule);
 
     new Setting(contentEl).setName("Match").addDropdown((dropdown) => {
       dropdown.addOption("all", "All conditions");
@@ -260,7 +346,7 @@ export class RuleEditModal extends Modal {
   /** Shows what the rule would catch before it is saved. */
   private refreshPreview(): void {
     this.previewEl.empty();
-    const errors = validateRule(this.rule);
+    const errors = this.kind.validate(this.rule);
     if (errors.length) {
       this.previewEl.createEl("p", { cls: "fin-rule-error-text", text: errors[0] });
       return;
@@ -272,11 +358,11 @@ export class RuleEditModal extends Modal {
       text: `Matches ${matches.length} of ${records.length} transactions.`,
     });
 
-    const manual = matches.filter((record) => record.excluded && record.excludeSource === "manual").length;
+    const manual = matches.filter((record) => this.kind.decidedByHand(record)).length;
     if (manual) {
       this.previewEl.createEl("p", {
         cls: "fin-sheet-note",
-        text: `${manual} of those were excluded by hand and will not be changed.`,
+        text: `${manual} of those were decided by hand and will not be changed.`,
       });
     }
 
@@ -289,12 +375,12 @@ export class RuleEditModal extends Modal {
   }
 
   private async save(): Promise<void> {
-    const errors = validateRule(this.rule);
+    const errors = this.kind.validate(this.rule);
     if (errors.length) {
       new Notice(errors.join("\n"));
       return;
     }
-    if (!this.rule.reason) this.rule.reason = this.rule.name;
+    this.kind.finish(this.rule);
     await this.onSave(this.rule);
     this.close();
   }

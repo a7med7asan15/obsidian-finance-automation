@@ -1,7 +1,7 @@
 import { PluginSettingTab, Setting } from "obsidian";
 import type { App } from "obsidian";
 import { VAULT_ROOT } from "./constants.ts";
-import { RulesEditorModal } from "./ui/components/rules-editor.ts";
+import { RulesEditorModal, TypeRulesEditorModal } from "./ui/components/rules-editor.ts";
 import { setUpWorkspace } from "./ui/workspace-setup.ts";
 import type FinanceAutomationPlugin from "./main.ts";
 
@@ -80,6 +80,15 @@ export class FinanceAutomationSettingTab extends PluginSettingTab {
       .addButton((button) =>
         button.setButtonText("Edit rules").onClick(() => {
           new RulesEditorModal(this.app, this.plugin).open();
+        }),
+      );
+
+    new Setting(containerEl)
+      .setName("Spending and income rules")
+      .setDesc("Rules that decide whether a matching message counts as spending, income, a transfer or a fee.")
+      .addButton((button) =>
+        button.setButtonText("Edit rules").onClick(() => {
+          new TypeRulesEditorModal(this.app, this.plugin).open();
         }),
       );
 

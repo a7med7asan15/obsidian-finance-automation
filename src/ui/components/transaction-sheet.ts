@@ -183,6 +183,11 @@ export class TransactionSheet extends Modal {
         // Editing by hand always makes the decision manual, so no rule will undo it.
         exclude_source: this.draft.excluded ? "manual" : null,
         exclude_rule_id: null,
+        // Only a type actually changed here becomes a manual one; saving an
+        // untouched type leaves a rule free to keep managing it.
+        ...(this.draft.type !== this.record.type
+          ? { type_source: "manual", type_rule_id: null, type_before_rule: null }
+          : {}),
       });
       this.close();
     } catch (error) {
