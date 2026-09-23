@@ -1,4 +1,4 @@
-import { ItemView } from "obsidian";
+import { ItemView, setIcon } from "obsidian";
 import type { WorkspaceLeaf } from "obsidian";
 import { PeriodPicker } from "./components/period-picker.ts";
 import { FilterBar } from "./components/filter-bar.ts";
@@ -13,12 +13,14 @@ export const BUDGET_VIEW_TYPE = "finance-budget-view";
 
 export type BudgetTab = "transactions" | "merchants" | "categories" | "accounts" | "stats";
 
-const TABS: Array<{ id: BudgetTab; label: string }> = [
-  { id: "transactions", label: "Transactions" },
-  { id: "merchants", label: "Merchants" },
-  { id: "categories", label: "Categories" },
-  { id: "accounts", label: "Accounts" },
-  { id: "stats", label: "Stats" },
+// A phone fits five tabs only as icons over short labels, so each tab carries
+// both; the stylesheet picks which label shows for the width it has.
+const TABS: Array<{ id: BudgetTab; label: string; short: string; icon: string }> = [
+  { id: "transactions", label: "Transactions", short: "Txns", icon: "receipt" },
+  { id: "merchants", label: "Merchants", short: "Merchants", icon: "store" },
+  { id: "categories", label: "Categories", short: "Categories", icon: "tags" },
+  { id: "accounts", label: "Accounts", short: "Accounts", icon: "landmark" },
+  { id: "stats", label: "Stats", short: "Stats", icon: "bar-chart-2" },
 ];
 
 export class BudgetView extends ItemView {
@@ -64,6 +66,9 @@ export class BudgetView extends ItemView {
     this.statsTab = new StatsTab(this.plugin);
 
     this.tabBarEl = root.createDiv({ cls: "fin-tabs" });
+    // Obsidian mobile opens the sidebar on a sideways swipe that starts
+    // anywhere in the view; a thumb on the tab bar meant to press a tab.
+    this.tabBarEl.addEventListener("touchstart", (event) => event.stopPropagation(), { passive: true });
     this.headerEl = root.createDiv({ cls: "fin-header" });
     this.bodyEl = root.createDiv({ cls: "fin-tab-body" });
 
@@ -92,7 +97,10 @@ export class BudgetView extends ItemView {
   private renderTabBar(): void {
     this.tabBarEl.empty();
     for (const tab of TABS) {
-      const button = this.tabBarEl.createEl("button", { cls: "fin-tab", text: tab.label });
+      const button = this.tabBarEl.createEl("button", { cls: "fin-tab" });
+      setIcon(button.createSpan({ cls: "fin-tab-icon" }), tab.icon);
+      button.createSpan({ cls: "fin-tab-label", text: tab.label });
+      button.createSpan({ cls: "fin-tab-label-short", text: tab.short });
       button.toggleClass("is-active", tab.id === this.activeTab);
       button.setAttribute("aria-selected", String(tab.id === this.activeTab));
       button.addEventListener("click", () => {

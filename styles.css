@@ -67,7 +67,13 @@
 }
 
 .fin-tab {
-  flex: 1;
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 6px;
   min-height: var(--fin-touch);
   border: none;
   border-radius: var(--fin-radius);
@@ -83,6 +89,25 @@
 .fin-tab.is-active {
   background: var(--fin-raised);
   color: var(--text-normal);
+}
+
+.fin-tab-icon { display: flex; flex: 0 0 auto; }
+.fin-tab-icon svg { width: 16px; height: 16px; }
+.fin-tab-label, .fin-tab-label-short {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fin-tab-label-short { display: none; }
+
+/* Five tabs never fit in a row on a phone as text alone: stack the icon over
+   a short label so the bar stays one screen wide. */
+@container (max-width: 520px) {
+  .fin-tabs { gap: 2px; padding: 6px 8px; }
+  .fin-tab { flex-direction: column; gap: 2px; padding: 4px 2px; font-size: 0.7em; }
+  .fin-tab-label { display: none; }
+  .fin-tab-label-short { display: block; max-width: 100%; }
 }
 
 .fin-tab-body {

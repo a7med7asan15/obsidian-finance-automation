@@ -4859,11 +4859,11 @@ var StatsTab = class {
 // src/ui/budget-view.ts
 var BUDGET_VIEW_TYPE = "finance-budget-view";
 var TABS = [
-  { id: "transactions", label: "Transactions" },
-  { id: "merchants", label: "Merchants" },
-  { id: "categories", label: "Categories" },
-  { id: "accounts", label: "Accounts" },
-  { id: "stats", label: "Stats" }
+  { id: "transactions", label: "Transactions", short: "Txns", icon: "receipt" },
+  { id: "merchants", label: "Merchants", short: "Merchants", icon: "store" },
+  { id: "categories", label: "Categories", short: "Categories", icon: "tags" },
+  { id: "accounts", label: "Accounts", short: "Accounts", icon: "landmark" },
+  { id: "stats", label: "Stats", short: "Stats", icon: "bar-chart-2" }
 ];
 var BudgetView = class extends import_obsidian24.ItemView {
   constructor(leaf, plugin) {
@@ -4892,6 +4892,7 @@ var BudgetView = class extends import_obsidian24.ItemView {
     this.accountsTab = new AccountsTab(this.plugin);
     this.statsTab = new StatsTab(this.plugin);
     this.tabBarEl = root.createDiv({ cls: "fin-tabs" });
+    this.tabBarEl.addEventListener("touchstart", (event) => event.stopPropagation(), { passive: true });
     this.headerEl = root.createDiv({ cls: "fin-header" });
     this.bodyEl = root.createDiv({ cls: "fin-tab-body" });
     this.renderTabBar();
@@ -4912,7 +4913,10 @@ var BudgetView = class extends import_obsidian24.ItemView {
   renderTabBar() {
     this.tabBarEl.empty();
     for (const tab of TABS) {
-      const button = this.tabBarEl.createEl("button", { cls: "fin-tab", text: tab.label });
+      const button = this.tabBarEl.createEl("button", { cls: "fin-tab" });
+      (0, import_obsidian24.setIcon)(button.createSpan({ cls: "fin-tab-icon" }), tab.icon);
+      button.createSpan({ cls: "fin-tab-label", text: tab.label });
+      button.createSpan({ cls: "fin-tab-label-short", text: tab.short });
       button.toggleClass("is-active", tab.id === this.activeTab);
       button.setAttribute("aria-selected", String(tab.id === this.activeTab));
       button.addEventListener("click", () => {
