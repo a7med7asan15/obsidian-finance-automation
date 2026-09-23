@@ -1,5 +1,6 @@
 import { Menu, setIcon } from "obsidian";
 import { distinctAccounts, distinctCategories } from "../../domain/filter.ts";
+import { keepSwipesInside } from "../events.ts";
 import type { FilterStore } from "../../store/filter-store.ts";
 import type { ExcludedMode, TransactionRecord, TransactionStatus, TransactionType } from "../../data/types.ts";
 
@@ -45,6 +46,8 @@ export class FilterBar {
   render(container: HTMLElement): void {
     const filter = this.store.get();
     const bar = container.createDiv({ cls: "fin-filter-bar" });
+    // The chip rows scroll sideways; that swipe is not a sidebar swipe.
+    keepSwipesInside(bar);
 
     // --- search ---
     const searchRow = bar.createDiv({ cls: "fin-search" });

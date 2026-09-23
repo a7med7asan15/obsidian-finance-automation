@@ -22,3 +22,15 @@ export function on<K extends keyof HTMLElementEventMap>(
     })();
   });
 }
+
+/**
+ * Keeps a sideways swipe on `element` from reaching Obsidian mobile, which
+ * opens a sidebar on any horizontal swipe in the view. A row that scrolls
+ * sideways, or a row of buttons a thumb drags across, means the swipe for
+ * itself.
+ */
+export function keepSwipesInside(element: HTMLElement): void {
+  const stop = (event: TouchEvent): void => event.stopPropagation();
+  element.addEventListener("touchstart", stop, { passive: true });
+  element.addEventListener("touchmove", stop, { passive: true });
+}

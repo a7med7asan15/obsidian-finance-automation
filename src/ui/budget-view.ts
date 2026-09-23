@@ -2,6 +2,7 @@ import { ItemView, setIcon } from "obsidian";
 import type { WorkspaceLeaf } from "obsidian";
 import { PeriodPicker } from "./components/period-picker.ts";
 import { FilterBar } from "./components/filter-bar.ts";
+import { keepSwipesInside } from "./events.ts";
 import { TransactionsTab } from "./tabs/transactions-tab.ts";
 import { AccountsTab } from "./tabs/accounts-tab.ts";
 import { MerchantsTab } from "./tabs/merchants-tab.ts";
@@ -66,9 +67,7 @@ export class BudgetView extends ItemView {
     this.statsTab = new StatsTab(this.plugin);
 
     this.tabBarEl = root.createDiv({ cls: "fin-tabs" });
-    // Obsidian mobile opens the sidebar on a sideways swipe that starts
-    // anywhere in the view; a thumb on the tab bar meant to press a tab.
-    this.tabBarEl.addEventListener("touchstart", (event) => event.stopPropagation(), { passive: true });
+    keepSwipesInside(this.tabBarEl);
     this.headerEl = root.createDiv({ cls: "fin-header" });
     this.bodyEl = root.createDiv({ cls: "fin-tab-body" });
 

@@ -2534,6 +2534,11 @@ function on(element, type, handler) {
     })();
   });
 }
+function keepSwipesInside(element) {
+  const stop = (event) => event.stopPropagation();
+  element.addEventListener("touchstart", stop, { passive: true });
+  element.addEventListener("touchmove", stop, { passive: true });
+}
 
 // src/ui/components/rules-editor.ts
 var FIELD_LABELS = {
@@ -3076,6 +3081,7 @@ var FilterBar = class {
   render(container) {
     const filter = this.store.get();
     const bar = container.createDiv({ cls: "fin-filter-bar" });
+    keepSwipesInside(bar);
     const searchRow = bar.createDiv({ cls: "fin-search" });
     const searchIcon = searchRow.createSpan({ cls: "fin-search-icon" });
     (0, import_obsidian14.setIcon)(searchIcon, "search");
@@ -5060,7 +5066,7 @@ var BudgetView = class extends import_obsidian24.ItemView {
     this.accountsTab = new AccountsTab(this.plugin);
     this.statsTab = new StatsTab(this.plugin);
     this.tabBarEl = root.createDiv({ cls: "fin-tabs" });
-    this.tabBarEl.addEventListener("touchstart", (event) => event.stopPropagation(), { passive: true });
+    keepSwipesInside(this.tabBarEl);
     this.headerEl = root.createDiv({ cls: "fin-header" });
     this.bodyEl = root.createDiv({ cls: "fin-tab-body" });
     this.renderTabBar();

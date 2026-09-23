@@ -353,6 +353,16 @@
 /* Keep the floating button clear of the iPhone home indicator. */
 .fin-fab { bottom: calc(20px + env(safe-area-inset-bottom)); }
 
+/* Obsidian mobile floats its navigation bar over the bottom of the view, so
+   the end of a tab (the New account button, the last row) scrolls clear of it,
+   and the floating button sits above it. */
+.is-mobile .finance-budget .fin-tab-body {
+  padding-bottom: calc(120px + env(safe-area-inset-bottom));
+}
+.is-mobile .finance-budget .fin-fab {
+  bottom: calc(76px + env(safe-area-inset-bottom));
+}
+
 /* Keep the sheet clear of it too. */
 @media (max-width: 640px) {
   .fin-sheet { padding-bottom: env(safe-area-inset-bottom); }
